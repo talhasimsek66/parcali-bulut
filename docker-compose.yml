@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: chatbot_db
+    environment:
+      POSTGRES_DB: acibadem_db
+      POSTGRES_USER: acu_user
+      POSTGRES_PASSWORD: supersecretpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  llm:
+    image: ollama/ollama:latest
+    container_name: chatbot_llm
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  web:
+    build: .
+    container_name: chatbot_web
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - llm
+    environment:
+      - DB_NAME=acibadem_db
+      - DB_USER=acu_user
+      - DB_PASSWORD=supersecretpassword
+      - DB_HOST=db
+      - DB_PORT=5432
+      - LLM_URL=http://llm:11434
+
+volumes:
+  postgres_data:
+  ollama_data:
