@@ -12,4 +12,4 @@ RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
 # Mevcut projenin tüm dosyalarını kopyala
-COPY Parcali_bulut .
+COPY . .
