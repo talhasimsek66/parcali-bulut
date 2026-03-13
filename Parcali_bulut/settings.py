@@ -21,7 +21,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "scraper",
+    "scraper",  # veri çeken bot
+    "chat",  # chat uygulaması
 ]
 
 MIDDLEWARE = [
