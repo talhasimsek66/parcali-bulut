@@ -18,7 +18,7 @@ class Command(BaseCommand):
             "https://obs.acibadem.edu.tr/oibs/bologna/progAbout.aspx?lang=tr&curSunit=6246"
         ]
 
-        # Selenium Ayarları
+        # selenium Ayarları
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
@@ -40,26 +40,22 @@ class Command(BaseCommand):
             self.stdout.write(f"Bağlanılıyor: {url}")
 
             try:
-                # Sadece OBS sistemi ise Selenium kullan
+                # sadece obs sistemi ise selenium kullan
                 if "obs.acibadem.edu.tr" in url:
                     self.stdout.write("Güvenlik duvarı aşılıyor, ana sayfadan oturum alınıyor...")
-                    # 1. Önce ana kapıya (index.aspx) gidip çerezleri (cookie) alıyoruz
+                    # önce index.aspx git (cookie)
                     driver.get(
                         "https://obs.acibadem.edu.tr/oibs/bologna/index.aspx?lang=tr&curOp=showPac&curUnit=14&curSunit=6246")
                     time.sleep(3)
-
                     self.stdout.write("Oturum alındı, doğrudan veri sayfasına gidiliyor...")
-                    # 2. Şimdi senin bulduğun o asıl arka kapı linkine gidiyoruz
                     driver.get(url)
                     time.sleep(3)
-
-                    # 3. Sayfadaki sadece "gözle görünür" ham metni alıyoruz (Etiketleri temizlemeye gerek kalmıyor)
                     body_element = driver.find_element(By.TAG_NAME, "body")
                     text_content = body_element.text
 
                     title = "Bilgisayar Mühendisliği - Program Bilgileri"
 
-                # Diğer normal sayfalar için requests yöntemi
+                # diğer normal sayfalar için requests yöntemi
                 else:
                     headers = {'User-Agent': 'Mozilla/5.0'}
                     response = requests.get(url, headers=headers)
@@ -73,7 +69,7 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.ERROR(f"Sayfa çekilemedi, Durum Kodu: {response.status_code}"))
                         continue
 
-                # Veritabanına kaydet
+                # veritabanına kaydet
                 AcibademData.objects.update_or_create(
                     url=url,
                     defaults={'title': title, 'content': text_content}
