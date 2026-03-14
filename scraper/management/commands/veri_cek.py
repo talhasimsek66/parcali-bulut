@@ -13,10 +13,12 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         urls_to_scrape = [
+            "https://www.acibadem.edu.tr/hakkimizda",
+            "https://www.acibadem.edu.tr/iletisim",
             "https://obs.acibadem.edu.tr/oibs/bologna/progAbout.aspx?lang=tr&curSunit=6246"
         ]
 
-        # selenium ayarları
+        # Selenium Ayarları
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
@@ -25,7 +27,6 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS('Veri çekme işlemi başlatılıyor...'))
 
-        # dinamik sayfalar için selenium driver ını docker üzerinden başlat
         try:
             driver = webdriver.Remote(
                 command_executor='http://selenium:4444/wd/hub',
@@ -39,35 +40,26 @@ class Command(BaseCommand):
             self.stdout.write(f"Bağlanılıyor: {url}")
 
             try:
-                # sadece obs sistemi ise selenium kullan
+                # Sadece OBS sistemi ise Selenium kullan
                 if "obs.acibadem.edu.tr" in url:
-                    self.stdout.write("Dinamik sayfa algılandı, Selenium ile işleniyor...")
+                    self.stdout.write("Güvenlik duvarı aşılıyor, ana sayfadan oturum alınıyor...")
+                    # 1. Önce ana kapıya (index.aspx) gidip çerezleri (cookie) alıyoruz
+                    driver.get(
+                        "https://obs.acibadem.edu.tr/oibs/bologna/index.aspx?lang=tr&curOp=showPac&curUnit=14&curSunit=6246")
+                    time.sleep(3)
+
+                    self.stdout.write("Oturum alındı, doğrudan veri sayfasına gidiliyor...")
+                    # 2. Şimdi senin bulduğun o asıl arka kapı linkine gidiyoruz
                     driver.get(url)
-                    # sitenin tamamen yüklenmesi için 5 saniye bekle
-                    time.sleep(5)
+                    time.sleep(3)
 
-                    iframes = driver.find_elements(By.TAG_NAME, "iframe")
-                    if len(iframes) > 0:
-                        self.stdout.write("Gizli çerçeve (iframe) bulundu, içine giriliyor...")
-                        # selenium u asıl içeriğin olduğu çerçevenin içine sokuyoruz
-                        driver.switch_to.frame(iframes[0])
-                        time.sleep(2)  # çerçeve içinin yüklenmesi için ufak bir bekleme
-
-                    # çerçevenin içindeki html i al
-                    html_source = driver.page_source
-                    soup = BeautifulSoup(html_source, 'html.parser')
-
-                    # bu kez sadece çalıştırılabilir kodları temizle diğer etiketlere dokunma
-                    for element in soup(["script", "style"]):
-                        element.extract()
+                    # 3. Sayfadaki sadece "gözle görünür" ham metni alıyoruz (Etiketleri temizlemeye gerek kalmıyor)
+                    body_element = driver.find_element(By.TAG_NAME, "body")
+                    text_content = body_element.text
 
                     title = "Bilgisayar Mühendisliği - Program Bilgileri"
-                    text_content = soup.get_text(separator=' ', strip=True)
 
-                    # işlem bitince ana sayfaya geri dön
-                    driver.switch_to.default_content()
-
-                # diğer normal sayfalar için hızlı requests yöntemi
+                # Diğer normal sayfalar için requests yöntemi
                 else:
                     headers = {'User-Agent': 'Mozilla/5.0'}
                     response = requests.get(url, headers=headers)
@@ -81,7 +73,7 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.ERROR(f"Sayfa çekilemedi, Durum Kodu: {response.status_code}"))
                         continue
 
-                # veritabanına kaydet (veya güncelle)
+                # Veritabanına kaydet
                 AcibademData.objects.update_or_create(
                     url=url,
                     defaults={'title': title, 'content': text_content}
@@ -91,8 +83,8 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Hata oluştu: {str(e)}"))
 
-            self.stdout.write("Sunucu kurallarına uyuluyor, 2 saniye bekleniyor...")
+            self.stdout.write("2 saniye bekleniyor...")
             time.sleep(2)
 
-        driver.quit()  # tarayıcıyı kapat ve belleği temizle
+        driver.quit()
         self.stdout.write(self.style.SUCCESS('Tüm veri çekme işlemleri tamamlandı!'))
