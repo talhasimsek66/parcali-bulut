@@ -1,22 +1,22 @@
-# Çevresel değişkenler ve gizli dosyalar
+# çevresel değişkenler ve gizli dosyalar
 .env
 
-# Python önbellek dosyaları (Senin repondaki __pycache__ klasörleri gitmeyecek)
+# python önbellek dosyaları
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Django
+# django
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
-# Ortam ve Sanal Makineler
+# ortam ve sanal Makineler
 venv/
 env/
 
-# IDE / İşletim Sistemi
+# IDE işletim Sistemi
 .vscode/
 .idea/
 .DS_Store

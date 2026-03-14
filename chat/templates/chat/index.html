@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acıbadem AI Asistanı</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .chat-container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { background: #004a8f; color: white; padding: 15px; text-align: center; font-size: 1.2em; font-weight: bold; }
+        .chat-box { height: 400px; overflow-y: auto; padding: 20px; border-bottom: 1px solid #ddd; }
+        .message { margin-bottom: 15px; line-height: 1.4; }
+        .user-msg { text-align: right; color: #004a8f; font-weight: bold; }
+        .ai-msg { text-align: left; color: #333; background: #f1f1f1; padding: 10px; border-radius: 5px; display: inline-block; max-width: 80%; }
+        .input-area { display: flex; padding: 10px; background: #eee; }
+        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; outline: none; }
+        button { background: #004a8f; color: white; border: none; padding: 10px 15px; margin-left: 10px; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #003366; }
+        .loading { font-style: italic; color: #888; font-size: 0.9em; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="header">Acıbadem AI Asistanı</div>
+    <div class="chat-box" id="chatBox">
+        <div class="message ai-msg">Merhaba! Ben Acıbadem Üniversitesi yapay zeka asistanıyım. Size nasıl yardımcı olabilirim?</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="Sorunuzu buraya yazın..." onkeypress="handleKeyPress(event)">
+        <button onclick="sendMessage()">Gönder</button>
+    </div>
+    <div style="text-align: center; padding: 5px;">
+        <span class="loading" id="loadingText">Yapay Zeka düşünüyor...</span>
+    </div>
+</div>
+
+<script>
+    async function sendMessage() {
+        const inputField = document.getElementById('userInput');
+        const chatBox = document.getElementById('chatBox');
+        const loadingText = document.getElementById('loadingText');
+        const question = inputField.value.trim();
+
+        if (question === "") return;
+
+        // Kullanıcı mesajını ekrana ekle
+        chatBox.innerHTML += `<div class="message user-msg">Siz: ${question}</div>`;
+        inputField.value = "";
+        loadingText.style.display = "block";
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            // Arka plandaki Django API'mize soruyu gönderiyoruz
+            const response = await fetch('/api/chat/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: question })
+            });
+
+            const data = await response.json();
+
+            if (data.answer) {
+                chatBox.innerHTML += `<div class="message ai-msg"><strong>Asistan:</strong> ${data.answer}</div>`;
+            } else {
+                chatBox.innerHTML += `<div class="message ai-msg" style="color:red;">Hata: ${data.error}</div>`;
+            }
+        } catch (error) {
+            chatBox.innerHTML += `<div class="message ai-msg" style="color:red;">Sunucuya bağlanılamadı.</div>`;
+        }
+
+        loadingText.style.display = "none";
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function handleKeyPress(event) {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    }
+</script>
+
+</body>
+</html>

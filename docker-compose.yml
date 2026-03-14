@@ -13,6 +13,11 @@ services:
     ports:
       - "5432:5432"
 
+  selenium:
+    image: selenium/standalone-chromium:latest
+    ports:
+      - "4444:4444"
+
   llm:
     image: ollama/ollama:latest
     container_name: chatbot_llm
