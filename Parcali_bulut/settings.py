@@ -1,17 +1,22 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-SECRET_KEY = "django-insecure-0k_bo*83d*848av$n)!7i@+e60r0vpcl&232)uh2)hj9$!99n-"
+env_path = os.path.join(BASE_DIR, '.env')
+load_dotenv(env_path)
 
 
-DEBUG = True
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
 
-ALLOWED_HOSTS = []
+DEBUG = os.environ.get("DEBUG") == "True"
+
+
+ALLOWED_HOSTS = ["*"]
 
 
 INSTALLED_APPS = [
@@ -61,9 +66,9 @@ WSGI_APPLICATION = "Parcali_bulut.wsgi.application"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'acibadem_db'),
-        'USER': os.environ.get('DB_USER', 'acu_user'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'supersecretpassword'),
+        'NAME': os.environ.get('DB_NAME'),
+        'USER': os.environ.get('DB_USER'),
+        'PASSWORD': os.environ.get('DB_PASSWORD'),
         'HOST': os.environ.get('DB_HOST', 'db'),
         'PORT': os.environ.get('DB_PORT', '5432'),
     }

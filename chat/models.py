@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class ChatMessage(models.Model):
     user_message = models.TextField(verbose_name="Kullanıcı Sorusu")
     ai_response = models.TextField(verbose_name="Yapay Zeka Cevabı")

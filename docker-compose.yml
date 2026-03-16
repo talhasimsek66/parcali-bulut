@@ -5,9 +5,9 @@ services:
     image: postgres:15-alpine
     container_name: chatbot_db
     environment:
-      POSTGRES_DB: acibadem_db
-      POSTGRES_USER: acu_user
-      POSTGRES_PASSWORD: supersecretpassword
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -37,10 +37,9 @@ services:
     depends_on:
       - db
       - llm
+    env_file:
+      - .env
     environment:
-      - DB_NAME=acibadem_db
-      - DB_USER=acu_user
-      - DB_PASSWORD=supersecretpassword
       - DB_HOST=db
       - DB_PORT=5432
       - LLM_URL=http://llm:11434
