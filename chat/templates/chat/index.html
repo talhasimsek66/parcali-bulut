@@ -1,84 +1,220 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Acıbadem AI Asistanı</title>
+    <title>Acıbadem AI - Elite Assistant</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
-        .chat-container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; }
-        .header { background: #004a8f; color: white; padding: 15px; text-align: center; font-size: 1.2em; font-weight: bold; }
-        .chat-box { height: 400px; overflow-y: auto; padding: 20px; border-bottom: 1px solid #ddd; }
-        .message { margin-bottom: 15px; line-height: 1.4; }
-        .user-msg { text-align: right; color: #004a8f; font-weight: bold; }
-        .ai-msg { text-align: left; color: #333; background: #f1f1f1; padding: 10px; border-radius: 5px; display: inline-block; max-width: 80%; }
-        .input-area { display: flex; padding: 10px; background: #eee; }
-        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; outline: none; }
-        button { background: #004a8f; color: white; border: none; padding: 10px 15px; margin-left: 10px; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #003366; }
-        .loading { font-style: italic; color: #888; font-size: 0.9em; display: none; }
+        :root {
+            --acu-blue: #004a8f;
+            --acu-dark: #002d58;
+            --glass: rgba(255, 255, 255, 0.9);
+            --shadow: 0 10px 30px rgba(0,0,0,0.08);
+            --grad: linear-gradient(135deg, #004a8f 0%, #002d58 100%);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            background: radial-gradient(circle at top right, #fdfdfd, #e9eff5);
+            display: flex; height: 100vh; overflow: hidden; justify-content: center; align-items: center;
+        }
+
+        /* O beğendiğin premium cam konteyner */
+        .main-content {
+            width: 95%; height: 92vh; max-width: 1100px;
+            background: var(--glass); backdrop-filter: blur(15px);
+            border-radius: 24px; display: flex; flex-direction: column;
+            position: relative; box-shadow: var(--shadow);
+            border: 1px solid rgba(255,255,255,0.7); overflow: hidden;
+        }
+
+        .watermark {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 400px; opacity: 0.03; pointer-events: none; filter: grayscale(1);
+        }
+
+        .top-bar {
+            padding: 20px 35px; background: rgba(255, 255, 255, 0.5);
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid rgba(0,0,0,0.05); z-index: 10;
+        }
+
+        .brand-logo {
+            width: 40px; height: 40px; background: var(--grad); border-radius: 12px;
+            color: white; display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 20px; box-shadow: 0 4px 12px rgba(0,74,143,0.3);
+        }
+
+        #chatBox { flex: 1; overflow-y: auto; padding: 30px; scroll-behavior: smooth; z-index: 1; }
+
+        .welcome-container {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 80%; text-align: center; animation: fadeIn 0.8s ease-out;
+        }
+
+        .welcome-logo { width: 140px; margin-bottom: 30px; }
+
+        /* Mesaj Stilleri */
+        .message-row { margin-bottom: 25px; display: flex; animation: slideUp 0.4s ease; width: 100%; }
+        .ai-row { justify-content: flex-start; }
+        .user-row { justify-content: flex-end; }
+
+        .message-content { display: flex; gap: 15px; max-width: 80%; }
+        .user-row .message-content { flex-direction: row-reverse; }
+
+        .avatar {
+            width: 38px; height: 38px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .ai-avatar { background: var(--grad); color: white; }
+        .user-avatar { background: white; color: var(--acu-blue); border: 1px solid #dee2e6; }
+
+        .text { padding: 14px 20px; border-radius: 18px; font-size: 15px; line-height: 1.5; }
+        .ai-row .text { background: white; border: 1px solid #f0f0f0; border-top-left-radius: 4px; }
+        .user-row .text { background: var(--grad); color: white; border-top-right-radius: 4px; }
+
+        /* Giriş Alanı */
+        .input-container { padding: 25px 40px 35px; background: transparent; z-index: 10; }
+        .input-wrapper {
+            background: white; border-radius: 20px; padding: 10px 15px;
+            display: flex; align-items: center; border: 1px solid #eee;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.06);
+        }
+
+        textarea { flex: 1; border: none; outline: none; padding: 12px; font-size: 15px; resize: none; font-family: inherit; }
+
+        .send-btn {
+            background: var(--grad); color: white; border: none;
+            width: 45px; height: 45px; border-radius: 15px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: all 0.3s ease;
+        }
+        .send-btn:hover { transform: scale(1.05); }
+
+        /* Status & Animations */
+        .status-badge { display: flex; align-items: center; gap: 6px; background: #ecfdf5; color: #059669; padding: 6px 14px; border-radius: 100px; font-size: 12px; }
+        .status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        .typing-dots { display: flex; gap: 4px; padding: 10px; }
+        .dot { width: 6px; height: 6px; background: #adb5bd; border-radius: 50%; animation: blink 1.4s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
     </style>
 </head>
 <body>
 
-<div class="chat-container">
-    <div class="header">Acıbadem AI Asistanı</div>
-    <div class="chat-box" id="chatBox">
-        <div class="message ai-msg">Merhaba! Ben Acıbadem Üniversitesi yapay zeka asistanıyım. Size nasıl yardımcı olabilirim?</div>
+<div class="main-content">
+    <img src="{% static 'image/aculogo1.jpg' %}" class="watermark">
+
+    <div class="top-bar">
+        <div class="brand" style="display: flex; align-items: center; gap: 15px;">
+            <div class="brand-logo">A</div>
+            <h1 style="color:var(--acu-dark); font-size: 1.1rem;">Acıbadem AI Asistanı</h1>
+        </div>
+        <div class="status-badge"><div class="status-dot"></div> Çevrimiçi</div>
     </div>
-    <div class="input-area">
-        <input type="text" id="userInput" placeholder="Sorunuzu buraya yazın..." onkeypress="handleKeyPress(event)">
-        <button onclick="sendMessage()">Gönder</button>
+
+    <div id="chatBox">
+        <div class="welcome-container" id="welcomeScreen">
+            <img src="{% static 'image/aculogo1.jpg' %}" class="welcome-logo">
+            <h2 style="color: var(--acu-blue); font-size: 2rem;">Nasıl yardımcı olabilirim?</h2>
+            <p style="color: #64748b; margin-top: 10px;">Acıbadem dünyası hakkında her şeyi sorabilirsiniz.</p>
+        </div>
     </div>
-    <div style="text-align: center; padding: 5px;">
-        <span class="loading" id="loadingText">Yapay Zeka düşünüyor...</span>
+
+    <div class="input-container">
+        <div class="input-wrapper">
+            <textarea id="userInput" placeholder="Mesajınızı buraya yazın..." rows="1"></textarea>
+            <button class="send-btn" id="sendBtn">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </div>
     </div>
 </div>
 
 <script>
+    const chatBox = document.getElementById('chatBox');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const welcomeScreen = document.getElementById('welcomeScreen');
+
+    userInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    function appendMessage(role, text) {
+        if (welcomeScreen) welcomeScreen.style.display = 'none';
+
+        const row = document.createElement('div');
+        row.className = `message-row ${role === 'ai' ? 'ai-row' : 'user-row'}`;
+
+        const avatarIcon = role === 'ai' ? '<i class="fa-solid fa-robot"></i>' : '<i class="fa-solid fa-user"></i>';
+        const avatarClass = role === 'ai' ? 'ai-avatar' : 'user-avatar';
+
+        row.innerHTML = `
+            <div class="message-content">
+                <div class="avatar ${avatarClass}">${avatarIcon}</div>
+                <div class="text">${text}</div>
+            </div>
+        `;
+        chatBox.appendChild(row);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
     async function sendMessage() {
-        const inputField = document.getElementById('userInput');
-        const chatBox = document.getElementById('chatBox');
-        const loadingText = document.getElementById('loadingText');
-        const question = inputField.value.trim();
+        const question = userInput.value.trim();
+        if (!question) return;
 
-        if (question === "") return;
+        appendMessage('user', question);
+        userInput.value = "";
+        userInput.style.height = 'auto';
 
-        // Kullanıcı mesajını ekrana ekle
-        chatBox.innerHTML += `<div class="message user-msg">Siz: ${question}</div>`;
-        inputField.value = "";
-        loadingText.style.display = "block";
+        // Gönderimi engelle (çift tıklama vb)
+        userInput.disabled = true;
+        sendBtn.disabled = true;
+
+        // Typing indicator
+        const typingId = 'typing-' + Date.now();
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message-row ai-row';
+        typingDiv.id = typingId;
+        typingDiv.innerHTML = `<div class="message-content"><div class="avatar ai-avatar"><i class="fa-solid fa-robot"></i></div><div class="typing-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
+        chatBox.appendChild(typingDiv);
         chatBox.scrollTop = chatBox.scrollHeight;
 
         try {
-            // Arka plandaki Django API'mize soruyu gönderiyoruz
             const response = await fetch('/api/chat/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
                 body: JSON.stringify({ question: question })
             });
-
             const data = await response.json();
-
-            if (data.answer) {
-                chatBox.innerHTML += `<div class="message ai-msg"><strong>Asistan:</strong> ${data.answer}</div>`;
-            } else {
-                chatBox.innerHTML += `<div class="message ai-msg" style="color:red;">Hata: ${data.error}</div>`;
-            }
-        } catch (error) {
-            chatBox.innerHTML += `<div class="message ai-msg" style="color:red;">Sunucuya bağlanılamadı.</div>`;
+            document.getElementById(typingId).remove();
+            appendMessage('ai', data.answer || "Hata oluştu.");
+        } catch (e) {
+            if(document.getElementById(typingId)) document.getElementById(typingId).remove();
+            appendMessage('ai', "Bağlantı hatası!");
+        } finally {
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            userInput.focus();
         }
-
-        loadingText.style.display = "none";
-        chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    function handleKeyPress(event) {
-        if (event.key === "Enter") {
+    // Hem tıklama hem Enter için dinleyiciler
+    sendBtn.addEventListener('click', sendMessage);
+    userInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             sendMessage();
         }
-    }
+    });
 </script>
-
 </body>
 </html>
