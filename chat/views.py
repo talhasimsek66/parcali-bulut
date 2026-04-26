@@ -8,80 +8,107 @@ from .models import ChatMessage
 from django.db.models import Q
 
 
-# kullanıcıların sohbet edeceği sayfa
 def chat_interface(request):
     return render(request, 'chat/index.html')
 
 
-# 2. yapay zeka ile haberleşen api
-@csrf_exempt  # şimdilik api testini kolaylaştırmak için CSRF esnetme (uygulamalar arası geçişte problem yaratabiliyor)
+@csrf_exempt
 def chat_api(request):
     if request.method == 'POST':
         try:
-            # kullanıcının gönderdiği soruyu al
             data = json.loads(request.body)
             user_question = data.get('question', '')
 
-            # kullanıcının sorusundaki kelimeleri ayır ve 3 harften büyükleri al
+            # 🔹 keyword çıkar
             keywords = [word for word in user_question.lower().split() if len(word) > 3]
 
             query = Q()
             for word in keywords:
-                # hem sayfa başlığında hem de içerikte bu kelimeleri ara
                 query |= Q(content__icontains=word) | Q(title__icontains=word)
 
-            # sorudaki kelimelerle eşleşen en alakalı 3 sayfayı getir (şimdilik 3 sayfa)
-            acibadem_data = AcibademData.objects.filter(query).distinct()[:3]
+            # 🔹 tüm sonuçları al
+            results = AcibademData.objects.filter(query).distinct()
 
-            # eğer sorulan kelimelerle ilgili hiçbir sayfa bulamazsa genel bilgi vermek için rastgele 3 sayfa al
-            if not acibadem_data.exists():
-                acibadem_data = AcibademData.objects.all()[:3]
+            # 🔥 ranking sistemi
+            scored_results = []
+            for item in results:
+                score = 0
+                for word in keywords:
+                    if word in item.title.lower():
+                        score += 3
+                    if word in item.content.lower():
+                        score += 1
+                scored_results.append((score, item))
 
-            # bulunan sayfaların ilk 2500 karakterini al
-            context_text = "\n\n".join([f"--- {item.title} ---\n{item.content[:2500]}" for item in acibadem_data])
+            scored_results.sort(key=lambda x: x[0], reverse=True)
 
-            # sohbet geçmişi /*/*/*/*/*/*/*/*
-            # database den son 3 sohbeti al (eskiden yeniye)
+            # 🔥 dynamic context
+            if len(user_question) < 30:
+                top_k = 2
+            elif len(user_question) < 80:
+                top_k = 3
+            else:
+                top_k = 5
+
+            acibadem_data = [item for score, item in scored_results[:top_k]]
+
+            # 🔹 fallback
+            if not acibadem_data:
+                acibadem_data = list(AcibademData.objects.all()[:top_k])
+
+            # 🔹 context oluştur
+            context_text = "\n\n".join([
+                f"--- {item.title} ---\n{item.content[:2500]}"
+                for item in acibadem_data
+            ])
+
+            # 🔹 chat history
             recent_chats = ChatMessage.objects.order_by('-created_at')[:3]
             history_text = ""
+
             if recent_chats:
                 for chat in reversed(recent_chats):
                     history_text += f"Kullanıcı: {chat.user_message}\nAsistan: {chat.ai_response}\n\n"
             else:
                 history_text = "Bu ilk konuşmamız, henüz geçmiş yok."
 
-            # yapay zekaya kim olduğunu ve elindeki verileri söylüyoruz
+            # 🔹 prompt
             prompt = f"""Sen Acıbadem Üniversitesi için tasarlanmış resmi ve yardımsever bir yapay zeka asistanısın. 
-            Aşağıda sana üniversitenin web sitesinden toplanmış bazı güncel bilgiler (Context) ve bizim seninle olan önceki konuşmalarımızın geçmişini (Geçmiş) veriyorum. 
-            Lütfen kullanıcının sorusunu SADECE bu bilgilere ve geçmiş konuşmalarımıza dayanarak yanıtla. 
-            Eğer cevap bu bilgilerde yoksa "Bu konu hakkında elimde güncel bir bilgi bulunmuyor." de ve asla uydurma.
+Aşağıda sana üniversitenin web sitesinden toplanmış bazı güncel bilgiler (Context) ve önceki konuşmalarımız (Geçmiş) veriliyor. 
 
-            [ÖNCEKİ KONUŞMALAR (GEÇMİŞ)]
-            {history_text}
-            [GEÇMİŞ BİTİŞİ]
+SADECE bu verilere dayanarak cevap ver.
+Eğer bilgi yoksa kesinlikle uydurma.
 
-            [BAĞLAM (CONTEXT) BİLGİLERİ BAŞLANGICI]
-            {context_text}
-            [BAĞLAM (CONTEXT) BİLGİLERİ BİTİŞİ]
+[GEÇMİŞ]
+{history_text}
 
-            Kullanıcının Sorusu: {user_question}
-            Cevabın:"""
+[CONTEXT]
+{context_text}
 
-            # llm */*/*/*/**/*/*/
-            # dockerdeki lokal llm e yolla
+Soru: {user_question}
+Cevap:"""
+
+            # 🔹 LLM isteği
             ollama_url = "http://llm:11434/api/generate"
             payload = {
-                "model": "qwen2.5:3b",  # indirdiğim modelin tam adı
+                "model": "qwen2.5:3b",
                 "prompt": prompt,
-                "stream": False  # cevabı kelime kelime değil tek seferde bütün olarak almak için
+                "stream": False
             }
 
             response = requests.post(ollama_url, json=payload)
-            response.raise_for_status()  # eğer sunucudan hata dönerse tut
+            response.raise_for_status()
 
             ai_answer = response.json().get('response', '')
 
-            ChatMessage.objects.create(   # sohbeti database e kaydet
+            # 🔥 CONFIDENCE CONTROL (EN ÖNEMLİ EKLENTİ)
+            if not ai_answer or len(ai_answer.strip()) < 20:
+                ai_answer = "Bu konu hakkında elimde yeterli ve güvenilir bilgi bulunmuyor."
+            elif any(x in ai_answer.lower() for x in ["bilmiyorum", "emin değilim", "kesin değil"]):
+                ai_answer = "Bu konu hakkında elimde yeterli ve güvenilir bilgi bulunmuyor."
+
+            # 🔹 kaydet
+            ChatMessage.objects.create(
                 user_message=user_question,
                 ai_response=ai_answer
             )
