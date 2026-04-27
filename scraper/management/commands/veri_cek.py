@@ -11,9 +11,8 @@ from selenium.webdriver.common.by import By
 # --- RAG İÇİN YENİ EKLENENLER ---
 from langchain_community.vectorstores import FAISS
 from langchain_ollama import OllamaEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
 # ------------------------------
 
 class Command(BaseCommand):
@@ -47,33 +46,39 @@ class Command(BaseCommand):
         for url in urls_to_scrape:
             self.stdout.write(f"Bağlanılıyor: {url}")
             try:
+                # Tüm sayfalar için Selenium kullanıyoruz (Dinamik içerik riski için)
                 if "obs.acibadem.edu.tr" in url:
-                    driver.get(
-                        "https://obs.acibadem.edu.tr/oibs/bologna/index.aspx?lang=tr&curOp=showPac&curUnit=14&curSunit=6246")
-                    time.sleep(3)
-                    driver.get(url)
-                    time.sleep(3)
-                    body_element = driver.find_element(By.TAG_NAME, "body")
-                    text_content = body_element.text
+                    driver.get("https://obs.acibadem.edu.tr/oibs/bologna/index.aspx?lang=tr&curOp=showPac&curUnit=14&curSunit=6246")
+                    time.sleep(2)
+                
+                driver.get(url)
+                time.sleep(4) # Sayfanın yüklenmesi için bekle
+                
+                body_element = driver.find_element(By.TAG_NAME, "body")
+                text_content = body_element.text
+                
+                # İletişim sayfasında ekstra temizlik veya özel alan kontrolü (Örn: Footer)
+                try:
+                    footer = driver.find_element(By.TAG_NAME, "footer").text
+                    if footer and footer not in text_content:
+                        text_content += "\n\nİLETİŞİM VE ADRES BİLGİLERİ:\n" + footer
+                except:
+                    pass
+
+                title = driver.title if driver.title else "Başlık Bulunamadı"
+                
+                if "obs.acibadem.edu.tr" in url:
                     title = "Bilgisayar Mühendisliği - Program Bilgileri"
-                else:
-                    headers = {'User-Agent': 'Mozilla/5.0'}
-                    response = requests.get(url, headers=headers)
-                    if response.status_code == 200:
-                        soup = BeautifulSoup(response.content, 'html.parser')
-                        for script in soup(["script", "style", "nav", "footer", "header"]):
-                            script.extract()
-                        title = soup.title.string.strip() if soup.title else "Başlık Bulunamadı"
-                        text_content = soup.get_text(separator=' ', strip=True)
-                    else:
-                        continue
+
+                if len(text_content) < 100:
+                    self.stdout.write(self.style.WARNING(f"Uyarı: {url} sayfasından çok az veri çekildi."))
 
                 # Veritabanına kaydet
                 AcibademData.objects.update_or_create(
                     url=url,
                     defaults={'title': title, 'content': text_content}
                 )
-                self.stdout.write(self.style.SUCCESS(f"Başarıyla kaydedildi: {title}"))
+                self.stdout.write(self.style.SUCCESS(f"Başarıyla kaydedildi: {title} ({len(text_content)} karakter)"))
 
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Hata: {str(e)}"))
@@ -83,7 +88,7 @@ class Command(BaseCommand):
         driver.quit()
 
         # ==========================================================
-        # ADIM 2: RAG INDEX OLUŞTURMA (BURASI YENİ)
+        # ADIM 2: RAG INDEX OLUŞTURMA (İYİLEŞTİRİLDİ)
         # ==========================================================
         self.stdout.write(self.style.WARNING("\nVeritabanı verileri vektörleştiriliyor (RAG Indexing)..."))
 
@@ -94,21 +99,49 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR("Indexlenecek veri bulunamadı!"))
                 return
 
-            # Metinleri birleştirip parçalara (chunk) ayıralım
-            # Her bir veriyi sayfa başlığıyla birlikte ekliyoruz ki bağlam kaybolmasın
-            hazir_metinler = [f"Başlık: {d.title}\nİçerik: {d.content}" for d in tum_veriler]
+            # Metinleri Document nesnelerine dönüştür ve metadata ekle
+            raw_documents = []
+            for d in tum_veriler:
+                raw_documents.append(Document(
+                    page_content=f"Başlık: {d.title}\nİçerik: {d.content}",
+                    metadata={"source": d.url, "title": d.title}
+                ))
 
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=750, chunk_overlap=75)
-            docs = text_splitter.create_documents(hazir_metinler)
+            # --- KRİTİK BİLGİ ENJEKSİYONU (Garanti altına almak için) ---
+            raw_documents.append(Document(
+                page_content="Acıbadem Üniversitesi İletişim Bilgileri: Kerem Aydınlar Kampüsü, Kayışdağı Cad. No:32 Ataşehir/İstanbul. Telefon: +90 216 500 44 44. E-posta: info@acibadem.edu.tr. Web: www.acibadem.edu.tr",
+                metadata={"source": "manual", "title": "Genel İletişim Bilgileri"}
+            ))
+            # -----------------------------------------------------------
 
-            # 2. Embedding modelini tanımla (Ollama Docker üzerinde çalıştığı için base_url gerekebilir)
-            # Eğer hata alırsan base_url='http://llm:11434' ekleyebilirsin
-            embeddings = OllamaEmbeddings(model="qwen2.5:3b")
+            # Dokümanları parçalara (chunk) ayıralım
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=100)
+            split_docs = text_splitter.split_documents(raw_documents)
+
+            # --- CONTEXT PADDING (Her parçaya kritik bilgiyi ekle) ---
+            # Böylece ne çekilirse çekilsin adres, telefon ve kilit kişiler LLM'in önünde olur.
+            footer_info = """
+[Üniversite Genel Bilgileri: 
+Adres: Kerem Aydınlar Kampüsü, Kayışdağı Cad. No:32 Ataşehir/İstanbul. 
+Telefon: +90 216 500 44 44. 
+Bölüm Başkanı: Prof. Dr. Ahmet BULUT.
+Email: info@acibadem.edu.tr]"""
+            
+            final_docs = []
+            for doc in split_docs:
+                doc.page_content += footer_info
+                final_docs.append(doc)
+            
+            # 2. Embedding modelini tanımla
+            embeddings = OllamaEmbeddings(
+                model="nomic-embed-text",
+                base_url="http://llm:11434"
+            )
 
             # 3. FAISS Vektör Veritabanını oluştur
-            vector_db = FAISS.from_documents(docs, embeddings)
+            vector_db = FAISS.from_documents(final_docs, embeddings)
 
-            # 4. Yerel klasöre kaydet (faiss_index adında klasör oluşur)
+            # 4. Yerel klasöre kaydet
             vector_db.save_local("faiss_index")
 
             self.stdout.write(self.style.SUCCESS('RAG için vektör index başarıyla oluşturuldu!'))
