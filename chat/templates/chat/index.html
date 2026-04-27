@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -215,7 +216,78 @@ function handleKeyPress(e) {
 }
 
 window.onload = loadSessions;
-</script>
+    const chatBox = document.getElementById('chatBox');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const welcomeScreen = document.getElementById('welcomeScreen');
 
+    userInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    function appendMessage(role, text) {
+        if (welcomeScreen) welcomeScreen.style.display = 'none';
+
+        const row = document.createElement('div');
+        row.className = `message-row ${role === 'ai' ? 'ai-row' : 'user-row'}`;
+
+        const avatarIcon = role === 'ai' ? '<i class="fa-solid fa-robot"></i>' : '<i class="fa-solid fa-user"></i>';
+        const avatarClass = role === 'ai' ? 'ai-avatar' : 'user-avatar';
+
+        row.innerHTML = `
+            <div class="message-content">
+                <div class="avatar ${avatarClass}">${avatarIcon}</div>
+                <div class="text">${text}</div>
+            </div>
+        `;
+        chatBox.appendChild(row);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function sendMessage() {
+        const inputField = document.getElementById('userInput');
+        const chatBox = document.getElementById('chatBox');
+        const loadingText = document.getElementById('loadingText');
+
+        const question = inputField.value.trim();
+        if (question === "") return;
+
+        // kullanıcı mesajı
+        chatBox.innerHTML += `<div class="message user-msg">${question}</div>`;
+        inputField.value = "";
+        inputField.focus();
+
+        loadingText.style.display = "block";
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            const response = await fetch('/api/chat/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({ question: question })
+            });
+            const data = await response.json();
+
+            if (data.answer) {
+                chatBox.innerHTML += `<div class="message ai-msg">${data.answer}</div>`;
+            } else {
+                chatBox.innerHTML += `<div class="message ai-msg" style="color:red;">Hata: ${data.error}</div>`;
+            }
+
+        } catch (error) {
+            chatBox.innerHTML += `<div class="message ai-msg" style="color:red;">Sunucuya bağlanılamadı.</div>`;
+        }
+    }
+
+    // Hem tıklama hem Enter için dinleyiciler
+    sendBtn.addEventListener('click', sendMessage);
+    userInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+</script>
 </body>
 </html>
