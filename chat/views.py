@@ -4,13 +4,50 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from scraper.models import AcibademData
-from .models import ChatMessage
+from .models import ChatMessage, ChatSession
 from django.db.models import Q
+from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET
+
 
 
 def chat_interface(request):
     return render(request, 'chat/index.html')
 
+
+@require_GET
+def get_session_messages(request, session_id):
+    try:
+        session = ChatSession.objects.get(id=session_id)
+        messages = session.messages.order_by('created_at')
+
+        data = [
+            {
+                "user": m.user_message,
+                "ai": m.ai_response
+            }
+            for m in messages
+        ]
+
+        return JsonResponse({"messages": data})
+
+    except ChatSession.DoesNotExist:
+        return JsonResponse({"error": "Session bulunamadı"}, status=404)
+
+
+@require_GET
+def chat_sessions(request):
+    sessions = ChatSession.objects.all().order_by('-created_at')
+
+    data = [
+        {
+            "id": s.id,
+            "title": s.title
+        }
+        for s in sessions
+    ]
+
+    return JsonResponse({"sessions": data})
 
 @csrf_exempt
 def chat_api(request):
@@ -18,6 +55,14 @@ def chat_api(request):
         try:
             data = json.loads(request.body)
             user_question = data.get('question', '')
+
+            #  SESSION KONTROLÜ (EN ÖNEMLİ EKLENTİ)
+            session_id = data.get('session_id')
+
+            if session_id:
+                session = ChatSession.objects.get(id=session_id)
+            else:
+                session = ChatSession.objects.create(title=user_question[:30])
 
             # 🔹 keyword çıkar
             keywords = [word for word in user_question.lower().split() if len(word) > 3]
@@ -29,7 +74,7 @@ def chat_api(request):
             # 🔹 tüm sonuçları al
             results = AcibademData.objects.filter(query).distinct()
 
-            # 🔥 ranking sistemi
+            #  ranking sistemi
             scored_results = []
             for item in results:
                 score = 0
@@ -42,7 +87,7 @@ def chat_api(request):
 
             scored_results.sort(key=lambda x: x[0], reverse=True)
 
-            # 🔥 dynamic context
+            #  dynamic context
             if len(user_question) < 30:
                 top_k = 2
             elif len(user_question) < 80:
@@ -62,10 +107,10 @@ def chat_api(request):
                 for item in acibadem_data
             ])
 
-            # 🔹 chat history
-            recent_chats = ChatMessage.objects.order_by('-created_at')[:3]
-            history_text = ""
+            # 🔥 ARTIK SADECE BU SESSION'IN GEÇMİŞİ
+            recent_chats = ChatMessage.objects.filter(session=session).order_by('-created_at')[:3]
 
+            history_text = ""
             if recent_chats:
                 for chat in reversed(recent_chats):
                     history_text += f"Kullanıcı: {chat.user_message}\nAsistan: {chat.ai_response}\n\n"
@@ -101,19 +146,23 @@ Cevap:"""
 
             ai_answer = response.json().get('response', '')
 
-            # 🔥 CONFIDENCE CONTROL (EN ÖNEMLİ EKLENTİ)
+            #  confidence control
             if not ai_answer or len(ai_answer.strip()) < 20:
                 ai_answer = "Bu konu hakkında elimde yeterli ve güvenilir bilgi bulunmuyor."
             elif any(x in ai_answer.lower() for x in ["bilmiyorum", "emin değilim", "kesin değil"]):
                 ai_answer = "Bu konu hakkında elimde yeterli ve güvenilir bilgi bulunmuyor."
 
-            # 🔹 kaydet
+            #  kaydet (SESSION'A BAĞLI)
             ChatMessage.objects.create(
+                session=session,
                 user_message=user_question,
                 ai_response=ai_answer
             )
 
-            return JsonResponse({'answer': ai_answer})
+            return JsonResponse({
+                'answer': ai_answer,
+                'session_id': session.id
+            })
 
         except Exception as e:
             return JsonResponse({'error': f"Yapay zeka sunucusuna ulaşılamadı: {str(e)}"}, status=500)
