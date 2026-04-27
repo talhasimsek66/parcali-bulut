@@ -1,5 +1,6 @@
 import time
 import requests
+import os
 from bs4 import BeautifulSoup
 from django.core.management.base import BaseCommand
 from scraper.models import AcibademData
@@ -7,9 +8,16 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 
+# --- RAG İÇİN YENİ EKLENENLER ---
+from langchain_community.vectorstores import FAISS
+from langchain_ollama import OllamaEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+
+# ------------------------------
 
 class Command(BaseCommand):
-    help = "Acıbadem Üniversitesi web sitelerinden veri çeker ve veritabanına kaydeder."
+    help = "Acıbadem Üniversitesi web sitelerinden veri çeker ve RAG için indexler."
 
     def handle(self, *args, **kwargs):
         urls_to_scrape = [
@@ -18,7 +26,7 @@ class Command(BaseCommand):
             "https://obs.acibadem.edu.tr/oibs/bologna/progAbout.aspx?lang=tr&curSunit=6246"
         ]
 
-        # selenium Ayarları
+        # Selenium Ayarları
         chrome_options = Options()
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
@@ -38,24 +46,16 @@ class Command(BaseCommand):
 
         for url in urls_to_scrape:
             self.stdout.write(f"Bağlanılıyor: {url}")
-
             try:
-                # sadece obs sistemi ise selenium kullan
                 if "obs.acibadem.edu.tr" in url:
-                    self.stdout.write("Güvenlik duvarı aşılıyor, ana sayfadan oturum alınıyor...")
-                    # önce index.aspx git (cookie)
                     driver.get(
                         "https://obs.acibadem.edu.tr/oibs/bologna/index.aspx?lang=tr&curOp=showPac&curUnit=14&curSunit=6246")
                     time.sleep(3)
-                    self.stdout.write("Oturum alındı, doğrudan veri sayfasına gidiliyor...")
                     driver.get(url)
                     time.sleep(3)
                     body_element = driver.find_element(By.TAG_NAME, "body")
                     text_content = body_element.text
-
                     title = "Bilgisayar Mühendisliği - Program Bilgileri"
-
-                # diğer normal sayfalar için requests yöntemi
                 else:
                     headers = {'User-Agent': 'Mozilla/5.0'}
                     response = requests.get(url, headers=headers)
@@ -66,10 +66,9 @@ class Command(BaseCommand):
                         title = soup.title.string.strip() if soup.title else "Başlık Bulunamadı"
                         text_content = soup.get_text(separator=' ', strip=True)
                     else:
-                        self.stdout.write(self.style.ERROR(f"Sayfa çekilemedi, Durum Kodu: {response.status_code}"))
                         continue
 
-                # veritabanına kaydet
+                # Veritabanına kaydet
                 AcibademData.objects.update_or_create(
                     url=url,
                     defaults={'title': title, 'content': text_content}
@@ -77,10 +76,44 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"Başarıyla kaydedildi: {title}"))
 
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"Hata oluştu: {str(e)}"))
+                self.stdout.write(self.style.ERROR(f"Hata: {str(e)}"))
 
-            self.stdout.write("2 saniye bekleniyor...")
             time.sleep(2)
 
         driver.quit()
-        self.stdout.write(self.style.SUCCESS('Tüm veri çekme işlemleri tamamlandı!'))
+
+        # ==========================================================
+        # ADIM 2: RAG INDEX OLUŞTURMA (BURASI YENİ)
+        # ==========================================================
+        self.stdout.write(self.style.WARNING("\nVeritabanı verileri vektörleştiriliyor (RAG Indexing)..."))
+
+        try:
+            # 1. Veritabanındaki tüm içerikleri çek
+            tum_veriler = AcibademData.objects.all()
+            if not tum_veriler:
+                self.stdout.write(self.style.ERROR("Indexlenecek veri bulunamadı!"))
+                return
+
+            # Metinleri birleştirip parçalara (chunk) ayıralım
+            # Her bir veriyi sayfa başlığıyla birlikte ekliyoruz ki bağlam kaybolmasın
+            hazir_metinler = [f"Başlık: {d.title}\nİçerik: {d.content}" for d in tum_veriler]
+
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=750, chunk_overlap=75)
+            docs = text_splitter.create_documents(hazir_metinler)
+
+            # 2. Embedding modelini tanımla (Ollama Docker üzerinde çalıştığı için base_url gerekebilir)
+            # Eğer hata alırsan base_url='http://llm:11434' ekleyebilirsin
+            embeddings = OllamaEmbeddings(model="qwen2.5:3b")
+
+            # 3. FAISS Vektör Veritabanını oluştur
+            vector_db = FAISS.from_documents(docs, embeddings)
+
+            # 4. Yerel klasöre kaydet (faiss_index adında klasör oluşur)
+            vector_db.save_local("faiss_index")
+
+            self.stdout.write(self.style.SUCCESS('RAG için vektör index başarıyla oluşturuldu!'))
+
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"Vektörleştirme hatası: {str(e)}"))
+
+        self.stdout.write(self.style.SUCCESS('Tüm işlemler tamamlandı!'))
