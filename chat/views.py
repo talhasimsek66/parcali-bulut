@@ -54,23 +54,26 @@ def chat_api(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            user_question = data.get('question', '')
+            user_question = data.get('question', '').strip()
 
-            # SESSION KONTROLÜ
+            if not user_question:
+                return JsonResponse({"error": "Boş soru gönderilemez"}, status=400)
+
             session_id = data.get('session_id')
 
             if session_id:
-                session = ChatSession.objects.get(id=session_id)
+                try:
+                    session = ChatSession.objects.get(id=session_id)
+                except ChatSession.DoesNotExist:
+                    session = ChatSession.objects.create(title=user_question[:30])
             else:
                 session = ChatSession.objects.create(title=user_question[:30])
 
-            # FAQ (ÖZEL SORU) KONTROLÜ
             user_lower = user_question.lower()
             for item in FAQ_DATA:
                 if any(keyword in user_lower for keyword in item["keywords"]):
                     ai_answer = item["answer"]
 
-                    # yine de session’a kaydet (çok önemli!)
                     ChatMessage.objects.create(
                         session=session,
                         user_message=user_question,
@@ -82,17 +85,14 @@ def chat_api(request):
                         "session_id": session.id
                     })
 
-            # keyword çıkar
-            keywords = [word for word in user_question.lower().split() if len(word) > 3]
+            keywords = [word for word in user_lower.split() if len(word) > 3]
 
             query = Q()
             for word in keywords:
                 query |= Q(content__icontains=word) | Q(title__icontains=word)
 
-            # tüm sonuçları al
             results = AcibademData.objects.filter(query).distinct()
 
-            # ranking sistemi
             scored_results = []
             for item in results:
                 score = 0
@@ -105,7 +105,6 @@ def chat_api(request):
 
             scored_results.sort(key=lambda x: x[0], reverse=True)
 
-            # dynamic context
             if len(user_question) < 30:
                 top_k = 2
             elif len(user_question) < 80:
@@ -115,17 +114,14 @@ def chat_api(request):
 
             acibadem_data = [item for score, item in scored_results[:top_k]]
 
-            # fallback
             if not acibadem_data:
                 acibadem_data = list(AcibademData.objects.all()[:top_k])
 
-            # context oluştur
             context_text = "\n\n".join([
                 f"--- {item.title} ---\n{item.content[:2500]}"
                 for item in acibadem_data
             ])
 
-            # SADECE BU SESSION’IN GEÇMİŞİ
             recent_chats = ChatMessage.objects.filter(session=session).order_by('-created_at')[:3]
 
             history_text = ""
@@ -135,7 +131,6 @@ def chat_api(request):
             else:
                 history_text = "Bu ilk konuşmamız, henüz geçmiş yok."
 
-            # prompt
             prompt = f"""Sen Acıbadem Üniversitesi için tasarlanmış resmi ve yardımsever bir yapay zeka asistanısın. 
 Aşağıda sana üniversitenin web sitesinden toplanmış bazı güncel bilgiler (Context) ve önceki konuşmalarımız (Geçmiş) veriliyor. 
 
@@ -151,26 +146,23 @@ Eğer bilgi yoksa kesinlikle uydurma.
 Soru: {user_question}
 Cevap:"""
 
-            # LLM isteği
-            ollama_url = "http://llm:11434/api/generate"
-            payload = {
-                "model": "qwen2.5:3b",
-                "prompt": prompt,
-                "stream": False
-            }
-
-            response = requests.post(ollama_url, json=payload)
+            response = requests.post(
+                "http://llm:11434/api/generate",
+                json={
+                    "model": "qwen2.5:3b",
+                    "prompt": prompt,
+                    "stream": False
+                }
+            )
             response.raise_for_status()
 
             ai_answer = response.json().get('response', '')
 
-            # cevap kontrolü
             if not ai_answer or len(ai_answer.strip()) < 20:
                 ai_answer = "Bu konu hakkında elimde yeterli ve güvenilir bilgi bulunmuyor."
             elif any(x in ai_answer.lower() for x in ["bilmiyorum", "emin değilim", "kesin değil"]):
                 ai_answer = "Bu konu hakkında elimde yeterli ve güvenilir bilgi bulunmuyor."
 
-            # kaydet
             ChatMessage.objects.create(
                 session=session,
                 user_message=user_question,
@@ -178,11 +170,11 @@ Cevap:"""
             )
 
             return JsonResponse({
-                'answer': ai_answer,
-                'session_id': session.id
+                "answer": ai_answer,
+                "session_id": session.id
             })
 
         except Exception as e:
-            return JsonResponse({'error': f"Yapay zeka sunucusuna ulaşılamadı: {str(e)}"}, status=500)
+            return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Geçersiz istek tipi.'}, status=400)
