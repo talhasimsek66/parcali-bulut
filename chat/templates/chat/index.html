@@ -2,139 +2,159 @@
 {% load static %}
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <title>Acıbadem AI Asistanı</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acıbadem AI Asistanı</title>
 
-    <style>
-        body { margin:0; font-family: Arial; height:100vh; }
-        .layout { display:flex; height:100%; }
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    display: flex;
+    height: 100vh;
+}
 
-        .sidebar {
-            width:260px;
-            background:#1e293b;
-            color:white;
-            padding:15px;
-            overflow-y:auto;
-        }
+/* SIDEBAR */
+.sidebar {
+    width: 250px;
+    background: #111827;
+    color: white;
+    padding: 15px;
+    overflow-y: auto;
+}
 
-        .session-item {
-            padding:10px;
-            border-bottom:1px solid #334155;
-            cursor:pointer;
-        }
+.sidebar button {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #2563eb;
+    border: none;
+    color: white;
+    cursor: pointer;
+    border-radius: 6px;
+}
 
-        .session-item:hover { background:#334155; }
+.session {
+    padding: 10px;
+    cursor: pointer;
+    border-radius: 6px;
+    margin-bottom: 5px;
+}
 
-        .main {
-            flex:1;
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            background:#eef2f7;
-        }
+.session:hover {
+    background: #374151;
+}
 
-        .chat-container {
-            width:650px;
-            background:white;
-            border-radius:10px;
-            overflow:hidden;
-        }
+/* CHAT */
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #f9fafb;
+}
 
-        .header {
-            background:#004a8f;
-            color:white;
-            padding:15px;
-            text-align:center;
-        }
+.header {
+    background: #004a8f;
+    color: white;
+    padding: 15px;
+    text-align: center;
+    font-weight: bold;
+}
 
-        .chat-box {
-            height:400px;
-            overflow-y:auto;
-            padding:15px;
-            display:flex;
-            flex-direction:column;
-        }
+.chat-box {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
 
-        .message {
-            margin:5px 0;
-            padding:10px;
-            border-radius:10px;
-            max-width:75%;
-        }
+.message {
+    margin: 10px 0;
+    max-width: 70%;
+    padding: 10px;
+    border-radius: 10px;
+}
 
-        .user-msg { align-self:flex-end; background:#004a8f; color:white; }
-        .ai-msg { align-self:flex-start; background:#e9f1fb; }
+.user-msg {
+    background: #2563eb;
+    color: white;
+    margin-left: auto;
+}
 
-        .input-area {
-            display:flex;
-            padding:10px;
-        }
+.ai-msg {
+    background: #e5e7eb;
+}
 
-        input { flex:1; padding:10px; }
-        button { margin-left:10px; }
+/* ROBOT */
+.ai-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
 
-        .new-chat-btn {
-            width:100%;
-            padding:10px;
-            margin-bottom:10px;
-            background:#334155;
-            color:white;
-            border:none;
-            cursor:pointer;
-        }
-    </style>
+.robot {
+    width: 24px;
+}
+
+/* INPUT */
+.input-area {
+    display: flex;
+    padding: 10px;
+    background: #eee;
+}
+
+input {
+    flex: 1;
+    padding: 10px;
+}
+
+button.send {
+    margin-left: 10px;
+}
+
+.loading {
+    font-size: 12px;
+    color: gray;
+    display: none;
+}
+</style>
 </head>
 
 <body>
 
-<div class="layout">
+<div class="sidebar">
+    <button onclick="newChat()">+ Yeni Sohbet</button>
+    <div id="sessionsList"></div>
+</div>
 
-    <!-- 🔥 SIDEBAR -->
-    <div class="sidebar">
-        <button class="new-chat-btn" onclick="newChat()">➕ Yeni Sohbet</button>
+<div class="chat-container">
+    <div class="header">🤖 Acıbadem AI</div>
 
-        <h3>🗂 Sohbetler</h3>
-        <div id="sessionsList"></div>
+    <div class="chat-box" id="chatBox">
+        <div class="message ai-msg">
+            <div class="ai-header">
+                <img class="robot" src="https://cdn-icons-png.flaticon.com/512/4712/4712027.png">
+                <b>Asistan</b>
+            </div>
+            Merhaba! Size nasıl yardımcı olabilirim?
+        </div>
     </div>
 
-    <!-- 🔥 CHAT -->
-    <div class="main">
-        <div class="chat-container">
+    <div class="input-area">
+        <input id="userInput" placeholder="Mesaj yaz..." onkeypress="handleKeyPress(event)">
+        <button class="send" onclick="sendMessage()">Gönder</button>
+    </div>
 
-            <div class="header">🤖 Acıbadem AI Asistanı</div>
-
-            <div id="chatBox" class="chat-box">
-                <div class="message ai-msg">
-                    🤖 Merhaba! Size nasıl yardımcı olabilirim?
-                </div>
-            </div>
-
-            <div class="input-area">
-                <input id="userInput" placeholder="Sorunu yaz..." onkeypress="handleKeyPress(event)">
-                <button onclick="sendMessage()">Gönder</button>
-            </div>
-
-        </div>
+    <div style="text-align:center">
+        <span class="loading" id="loadingText">🤖 düşünüyor...</span>
     </div>
 
 </div>
 
 <script>
+
 let currentSessionId = null;
 
-// 🔥 YENİ SOHBET
-function newChat() {
-    currentSessionId = null;
-
-    const chat = document.getElementById('chatBox');
-    chat.innerHTML = `
-        <div class="message ai-msg">
-            🤖 Merhaba! Size nasıl yardımcı olabilirim?
-        </div>
-    `;
-}
-
-// 🔥 SESSION LİSTESİ
+/* SESSION LİSTESİ */
 async function loadSessions() {
     const res = await fetch('/api/sessions/');
     const data = await res.json();
@@ -144,7 +164,7 @@ async function loadSessions() {
 
     data.sessions.forEach(s => {
         const div = document.createElement("div");
-        div.className = "session-item";
+        div.className = "session";
         div.innerText = s.title;
 
         div.onclick = () => {
@@ -156,7 +176,7 @@ async function loadSessions() {
     });
 }
 
-// 🔥 MESAJLARI YÜKLE
+/* MESAJLARI YÜKLE */
 async function loadMessages(sessionId) {
     const res = await fetch(`/api/session/${sessionId}/`);
     const data = await res.json();
@@ -165,28 +185,32 @@ async function loadMessages(sessionId) {
     chat.innerHTML = "";
 
     data.messages.forEach(msg => {
-        chat.innerHTML += `<div class="message user-msg">👤 ${msg.user}</div>`;
-        chat.innerHTML += `<div class="message ai-msg">🤖 ${msg.ai}</div>`;
+        chat.innerHTML += `<div class="message user-msg">${msg.user}</div>`;
+
+        chat.innerHTML += `
+        <div class="message ai-msg">
+            <div class="ai-header">
+                <img class="robot" src="https://cdn-icons-png.flaticon.com/512/4712/4712027.png">
+                <b>Asistan</b>
+            </div>
+            ${msg.ai}
+        </div>`;
     });
 }
 
-// 🔥 MESAJ GÖNDER
+/* MESAJ GÖNDER */
 async function sendMessage() {
-    const input = document.getElementById('userInput');
-    const chat = document.getElementById('chatBox');
+    const input = document.getElementById("userInput");
+    const chat = document.getElementById("chatBox");
+    const loading = document.getElementById("loadingText");
 
     const question = input.value.trim();
     if (!question) return;
 
-    chat.innerHTML += `<div class="message user-msg">👤 ${question}</div>`;
+    chat.innerHTML += `<div class="message user-msg">${question}</div>`;
     input.value = "";
 
-    // 🔥 düşünüyor efekti
-    const loadingDiv = document.createElement("div");
-    loadingDiv.className = "message ai-msg";
-    loadingDiv.id = "loadingMsg";
-    loadingDiv.innerText = "🤖 düşünüyor...";
-    chat.appendChild(loadingDiv);
+    loading.style.display = "block";
 
     const res = await fetch('/api/chat/', {
         method: 'POST',
@@ -199,95 +223,38 @@ async function sendMessage() {
 
     const data = await res.json();
 
-    document.getElementById("loadingMsg")?.remove();
+    /* 🔥 FIX BURASI */
+    currentSessionId = data.session_id;
+    loadSessions();
+    loadMessages(currentSessionId);
 
-    if (!currentSessionId) {
-        currentSessionId = data.session_id;
-        loadSessions();
-    }
+    chat.innerHTML += `
+    <div class="message ai-msg">
+        <div class="ai-header">
+            <img class="robot" src="https://cdn-icons-png.flaticon.com/512/4712/4712027.png">
+            <b>Asistan</b>
+        </div>
+        ${data.answer}
+    </div>`;
 
-    chat.innerHTML += `<div class="message ai-msg">🤖 ${data.answer}</div>`;
+    loading.style.display = "none";
     chat.scrollTop = chat.scrollHeight;
 }
 
-// enter
+/* YENİ SOHBET */
+function newChat() {
+    currentSessionId = null;
+    document.getElementById("chatBox").innerHTML = "";
+}
+
+/* ENTER */
 function handleKeyPress(e) {
     if (e.key === "Enter") sendMessage();
 }
 
+/* SAYFA AÇILINCA */
 window.onload = loadSessions;
-    const chatBox = document.getElementById('chatBox');
-    const userInput = document.getElementById('userInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const welcomeScreen = document.getElementById('welcomeScreen');
 
-    userInput.addEventListener('input', function() {
-        this.style.height = 'auto';
-        this.style.height = (this.scrollHeight) + 'px';
-    });
-
-    function appendMessage(role, text) {
-        if (welcomeScreen) welcomeScreen.style.display = 'none';
-
-        const row = document.createElement('div');
-        row.className = `message-row ${role === 'ai' ? 'ai-row' : 'user-row'}`;
-
-        const avatarIcon = role === 'ai' ? '<i class="fa-solid fa-robot"></i>' : '<i class="fa-solid fa-user"></i>';
-        const avatarClass = role === 'ai' ? 'ai-avatar' : 'user-avatar';
-
-        row.innerHTML = `
-            <div class="message-content">
-                <div class="avatar ${avatarClass}">${avatarIcon}</div>
-                <div class="text">${text}</div>
-            </div>
-        `;
-        chatBox.appendChild(row);
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    async function sendMessage() {
-        const inputField = document.getElementById('userInput');
-        const chatBox = document.getElementById('chatBox');
-        const loadingText = document.getElementById('loadingText');
-
-        const question = inputField.value.trim();
-        if (question === "") return;
-
-        // kullanıcı mesajı
-        chatBox.innerHTML += `<div class="message user-msg">${question}</div>`;
-        inputField.value = "";
-        inputField.focus();
-
-        loadingText.style.display = "block";
-        chatBox.scrollTop = chatBox.scrollHeight;
-
-        try {
-            const response = await fetch('/api/chat/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-                body: JSON.stringify({ question: question })
-            });
-            const data = await response.json();
-
-            if (data.answer) {
-                chatBox.innerHTML += `<div class="message ai-msg">${data.answer}</div>`;
-            } else {
-                chatBox.innerHTML += `<div class="message ai-msg" style="color:red;">Hata: ${data.error}</div>`;
-            }
-
-        } catch (error) {
-            chatBox.innerHTML += `<div class="message ai-msg" style="color:red;">Sunucuya bağlanılamadı.</div>`;
-        }
-    }
-
-    // Hem tıklama hem Enter için dinleyiciler
-    sendBtn.addEventListener('click', sendMessage);
-    userInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
 </script>
 </body>
 </html>
