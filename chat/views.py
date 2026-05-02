@@ -3,14 +3,50 @@ import json
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET
 from scraper.models import AcibademData
-from .models import ChatMessage
+from .models import ChatMessage, ChatSession
 from django.db.models import Q
 from .faq import FAQ_DATA
 
 
 def chat_interface(request):
     return render(request, 'chat/index.html')
+
+
+@require_GET
+def get_session_messages(request, session_id):
+    try:
+        session = ChatSession.objects.get(id=session_id)
+        messages = session.messages.order_by('created_at')
+
+        data = [
+            {
+                "user": m.user_message,
+                "ai": m.ai_response
+            }
+            for m in messages
+        ]
+
+        return JsonResponse({"messages": data})
+
+    except ChatSession.DoesNotExist:
+        return JsonResponse({"error": "Session bulunamadı"}, status=404)
+
+
+@require_GET
+def chat_sessions(request):
+    sessions = ChatSession.objects.all().order_by('-created_at')
+
+    data = [
+        {
+            "id": s.id,
+            "title": s.title
+        }
+        for s in sessions
+    ]
+
+    return JsonResponse({"sessions": data})
 
 
 @csrf_exempt
@@ -20,12 +56,30 @@ def chat_api(request):
             data = json.loads(request.body)
             user_question = data.get('question', '')
 
-            # ÖZEL SORU (FAQ) KONTROLÜ
+            # SESSION KONTROLÜ
+            session_id = data.get('session_id')
+
+            if session_id:
+                session = ChatSession.objects.get(id=session_id)
+            else:
+                session = ChatSession.objects.create(title=user_question[:30])
+
+            # FAQ (ÖZEL SORU) KONTROLÜ
             user_lower = user_question.lower()
             for item in FAQ_DATA:
                 if any(keyword in user_lower for keyword in item["keywords"]):
+                    ai_answer = item["answer"]
+
+                    # yine de session’a kaydet (çok önemli!)
+                    ChatMessage.objects.create(
+                        session=session,
+                        user_message=user_question,
+                        ai_response=ai_answer
+                    )
+
                     return JsonResponse({
-                        "answer": item["answer"]
+                        "answer": ai_answer,
+                        "session_id": session.id
                     })
 
             # keyword çıkar
@@ -71,10 +125,10 @@ def chat_api(request):
                 for item in acibadem_data
             ])
 
-            # chat history
-            recent_chats = ChatMessage.objects.order_by('-created_at')[:3]
-            history_text = ""
+            # SADECE BU SESSION’IN GEÇMİŞİ
+            recent_chats = ChatMessage.objects.filter(session=session).order_by('-created_at')[:3]
 
+            history_text = ""
             if recent_chats:
                 for chat in reversed(recent_chats):
                     history_text += f"Kullanıcı: {chat.user_message}\nAsistan: {chat.ai_response}\n\n"
@@ -118,11 +172,15 @@ Cevap:"""
 
             # kaydet
             ChatMessage.objects.create(
+                session=session,
                 user_message=user_question,
                 ai_response=ai_answer
             )
 
-            return JsonResponse({'answer': ai_answer})
+            return JsonResponse({
+                'answer': ai_answer,
+                'session_id': session.id
+            })
 
         except Exception as e:
             return JsonResponse({'error': f"Yapay zeka sunucusuna ulaşılamadı: {str(e)}"}, status=500)
