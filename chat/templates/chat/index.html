@@ -2,259 +2,378 @@
 {% load static %}
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Acıbadem AI Asistanı</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acıbadem Üniversitesi AI Asistanı</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 
-<style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    display: flex;
-    height: 100vh;
-}
+    <style>
+        :root {
+            --primary-bg: #ffffff;
+            --sidebar-bg: #0a192f;
+            --sidebar-hover: #172a45;
+            --university-blue: #004a8f;
+            --accent-gold: #c5a059; /* Akademik bir dokunuş için hafif gold tonu */
+            --user-msg-bg: #004a8f;
+            --ai-msg-bg: #f8fafc;
+            --text-main: #1e293b;
+            --border-color: #e2e8f0;
+        }
 
-/* SIDEBAR */
-.sidebar {
-    width: 250px;
-    background: #111827;
-    color: white;
-    padding: 15px;
-    overflow-y: auto;
-}
+        * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
 
-.sidebar button {
-    width: 100%;
-    padding: 10px;
-    margin-bottom: 10px;
-    background: #2563eb;
-    border: none;
-    color: white;
-    cursor: pointer;
-    border-radius: 6px;
-}
+        body {
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            background: var(--primary-bg);
+            color: var(--text-main);
+        }
 
-.session {
-    padding: 10px;
-    cursor: pointer;
-    border-radius: 6px;
-    margin-bottom: 5px;
-}
+        /* SIDEBAR */
+        .sidebar {
+            width: 280px;
+            background: var(--sidebar-bg);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
 
-.session:hover {
-    background: #374151;
-}
+        .new-chat-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: 0.2s;
+        }
 
-/* CHAT */
-.chat-container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: #f9fafb;
-}
+        .new-chat-btn:hover { background: var(--sidebar-hover); }
 
-.header {
-    background: #004a8f;
-    color: white;
-    padding: 15px;
-    text-align: center;
-    font-weight: bold;
-}
+        .sessions-list {
+            margin-top: 25px;
+            flex: 1;
+            overflow-y: auto;
+        }
 
-.chat-box {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-}
+        .session-item {
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #cbd5e1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: 0.2s;
+        }
 
-.message {
-    margin: 10px 0;
-    max-width: 70%;
-    padding: 10px;
-    border-radius: 10px;
-}
+        .session-item:hover { background: var(--sidebar-hover); color: white; }
+        .session-item.active { background: var(--university-blue); color: white; }
 
-.user-msg {
-    background: #2563eb;
-    color: white;
-    margin-left: auto;
-}
+        /* MAIN CHAT AREA */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background-color: white;
+        }
 
-.ai-msg {
-    background: #e5e7eb;
-}
+        .header {
+            padding: 20px 40px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: white;
+        }
 
-/* ROBOT */
-.ai-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
+        .header .logo-area { display: flex; align-items: center; gap: 12px; }
+        .header h1 { font-size: 1.2rem; margin: 0; font-weight: 600; color: var(--university-blue); }
+        .header span { font-weight: 300; color: #64748b; }
 
-.robot {
-    width: 24px;
-}
+        .chat-box {
+            flex: 1;
+            overflow-y: auto;
+            padding: 40px 20%;
+            scroll-behavior: smooth;
+        }
 
-/* INPUT */
-.input-area {
-    display: flex;
-    padding: 10px;
-    background: #eee;
-}
+        /* MESSAGES */
+        .message {
+            margin-bottom: 32px;
+            display: flex;
+            flex-direction: column;
+            animation: slideUp 0.4s ease-out;
+        }
 
-input {
-    flex: 1;
-    padding: 10px;
-}
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
 
-button.send {
-    margin-left: 10px;
-}
+        .user-msg { align-items: flex-end; }
+        .user-msg .content {
+            background: var(--user-msg-bg);
+            color: white;
+            padding: 14px 20px;
+            border-radius: 20px 20px 4px 20px;
+            max-width: 80%;
+            font-size: 15px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
 
-.loading {
-    font-size: 12px;
-    color: gray;
-    display: none;
-}
-</style>
+        .ai-msg { align-items: flex-start; }
+        .ai-msg .content {
+            background: var(--ai-msg-bg);
+            border: 1px solid var(--border-color);
+            padding: 16px 22px;
+            border-radius: 20px 20px 20px 4px;
+            max-width: 90%;
+            line-height: 1.6;
+            font-size: 15px;
+            color: var(--text-main);
+        }
+
+        .ai-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--university-blue);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .university-icon {
+            width: 28px;
+            height: 28px;
+            background: var(--university-blue);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+        }
+
+        /* INPUT AREA */
+        .input-section {
+            padding: 20px 20% 40px 20%;
+            background: linear-gradient(to top, white 80%, transparent);
+        }
+
+        .input-wrapper {
+            background: white;
+            border-radius: 12px;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border-color);
+        }
+
+        .input-wrapper input {
+            flex: 1;
+            border: none;
+            padding: 12px;
+            outline: none;
+            font-size: 15px;
+            background: transparent;
+        }
+
+        .send-btn {
+            background: var(--university-blue);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: 0.2s;
+        }
+
+        .send-btn:hover { transform: scale(1.02); background: #003a70; }
+
+        .loading-dots {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            margin-left: 20%;
+            display: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .chat-box, .input-section { padding-left: 10%; padding-right: 10%; }
+        }
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .chat-box, .input-section { padding: 20px 5%; }
+        }
+    </style>
 </head>
-
 <body>
 
 <div class="sidebar">
-    <button onclick="newChat()">+ Yeni Sohbet</button>
-    <div id="sessionsList"></div>
+    <div style="margin-bottom: 30px; text-align: center;">
+        <div style="font-weight: 700; font-size: 1.2rem; letter-spacing: 1px;">ACIBADEM</div>
+        <div style="font-size: 0.7rem; color: var(--accent-gold); letter-spacing: 2px;">ÜNİVERSİTESİ</div>
+    </div>
+
+    <button class="new-chat-btn" onclick="newChat()">
+        <span>+</span> Yeni Sorgu Başlat
+    </button>
+
+    <div class="sessions-list" id="sessionsList"></div>
 </div>
 
 <div class="chat-container">
-    <div class="header">🤖 Acıbadem AI</div>
+    <div class="header">
+        <div class="logo-area">
+            <div class="university-icon">AÜ</div>
+            <h1>Üniversite <span>Akademik Asistan</span></h1>
+        </div>
+        <div style="display: flex; gap: 15px; font-size: 13px; color: #64748b;">
+            <span>Öğrenci Bilgi Sistemi</span>
+            <span>Kütüphane</span>
+        </div>
+    </div>
 
     <div class="chat-box" id="chatBox">
         <div class="message ai-msg">
             <div class="ai-header">
-                <img class="robot" src="https://cdn-icons-png.flaticon.com/512/4712/4712027.png">
-                <b>Asistan</b>
+                <div class="university-icon" style="width:20px; height:20px; font-size:10px;">AÜ</div>
+                Acıbadem Akademik Rehber
             </div>
-            Merhaba! Size nasıl yardımcı olabilirim?
+            <div class="content">
+                Merhaba! Ben Acıbadem Üniversitesi AI asistanıyım. Kampüs yaşamı, akademik takvim, yönetmelikler veya dersler hakkında sana nasıl yardımcı olabilirim?
+            </div>
         </div>
     </div>
 
-    <div class="input-area">
-        <input id="userInput" placeholder="Mesaj yaz..." onkeypress="handleKeyPress(event)">
-        <button class="send" onclick="sendMessage()">Gönder</button>
-    </div>
+    <div class="loading-dots" id="loadingText">Asistan yanıt hazırlıyor...</div>
 
-    <div style="text-align:center">
-        <span class="loading" id="loadingText">🤖 düşünüyor...</span>
+    <div class="input-section">
+        <div class="input-wrapper">
+            <input id="userInput" placeholder="Akademik bir soru sorun (Örn: Kayıt dondurma şartları nelerdir?)" onkeypress="handleKeyPress(event)">
+            <button class="send-btn" onclick="sendMessage()">Gönder</button>
+        </div>
+        <p style="text-align: center; font-size: 11px; color: #94a3b8; margin-top: 15px;">
+            Bu asistan bilgilendirme amaçlıdır. Resmi işlemler için OBS'yi kontrol ediniz.
+        </p>
     </div>
-
 </div>
 
 <script>
-
 let currentSessionId = null;
 
-/* SESSION LİSTESİ */
 async function loadSessions() {
-    const res = await fetch('/api/sessions/');
-    const data = await res.json();
+    try {
+        const res = await fetch('/api/sessions/');
+        const data = await res.json();
+        const list = document.getElementById('sessionsList');
+        list.innerHTML = "";
 
-    const list = document.getElementById('sessionsList');
-    list.innerHTML = "";
-
-    data.sessions.forEach(s => {
-        const div = document.createElement("div");
-        div.className = "session";
-        div.innerText = s.title;
-
-        div.onclick = () => {
-            currentSessionId = s.id;
-            loadMessages(s.id);
-        };
-
-        list.appendChild(div);
-    });
+        data.sessions.forEach(s => {
+            const div = document.createElement("div");
+            div.className = `session-item ${currentSessionId === s.id ? 'active' : ''}`;
+            div.innerText = s.title || "Yeni Akademik Sohbet";
+            div.onclick = () => {
+                currentSessionId = s.id;
+                loadMessages(s.id);
+                loadSessions();
+            };
+            list.appendChild(div);
+        });
+    } catch (e) { console.log("Sessions load error"); }
 }
 
-/* MESAJLARI YÜKLE */
 async function loadMessages(sessionId) {
     const res = await fetch(`/api/session/${sessionId}/`);
     const data = await res.json();
-
     const chat = document.getElementById('chatBox');
     chat.innerHTML = "";
 
     data.messages.forEach(msg => {
-        chat.innerHTML += `<div class="message user-msg">${msg.user}</div>`;
-
-        chat.innerHTML += `
-        <div class="message ai-msg">
-            <div class="ai-header">
-                <img class="robot" src="https://cdn-icons-png.flaticon.com/512/4712/4712027.png">
-                <b>Asistan</b>
-            </div>
-            ${msg.ai}
-        </div>`;
+        appendMessage('user', msg.user);
+        appendMessage('ai', msg.ai);
     });
-}
-
-/* MESAJ GÖNDER */
-async function sendMessage() {
-    const input = document.getElementById("userInput");
-    const chat = document.getElementById("chatBox");
-    const loading = document.getElementById("loadingText");
-
-    const question = input.value.trim();
-    if (!question) return;
-
-    chat.innerHTML += `<div class="message user-msg">${question}</div>`;
-    input.value = "";
-
-    loading.style.display = "block";
-
-    const res = await fetch('/api/chat/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            question: question,
-            session_id: currentSessionId
-        })
-    });
-
-    const data = await res.json();
-
-    /* 🔥 FIX BURASI */
-    currentSessionId = data.session_id;
-    loadSessions();
-    loadMessages(currentSessionId);
-
-    chat.innerHTML += `
-    <div class="message ai-msg">
-        <div class="ai-header">
-            <img class="robot" src="https://cdn-icons-png.flaticon.com/512/4712/4712027.png">
-            <b>Asistan</b>
-        </div>
-        ${data.answer}
-    </div>`;
-
-    loading.style.display = "none";
     chat.scrollTop = chat.scrollHeight;
 }
 
-/* YENİ SOHBET */
+function appendMessage(type, text) {
+    const chat = document.getElementById('chatBox');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `message ${type}-msg`;
+
+    if(type === 'ai') {
+        msgDiv.innerHTML = `
+            <div class="ai-header">
+                <div class="university-icon" style="width:20px; height:20px; font-size:10px;">AÜ</div>
+                Acıbadem Akademik Rehber
+            </div>
+            <div class="content">${text}</div>`;
+    } else {
+        msgDiv.innerHTML = `<div class="content">${text}</div>`;
+    }
+
+    chat.appendChild(msgDiv);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+async function sendMessage() {
+    const input = document.getElementById("userInput");
+    const question = input.value.trim();
+    if (!question) return;
+
+    appendMessage('user', question);
+    input.value = "";
+    document.getElementById("loadingText").style.display = "block";
+
+    try {
+        const res = await fetch('/api/chat/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: question, session_id: currentSessionId })
+        });
+        const data = await res.json();
+
+        currentSessionId = data.session_id;
+        appendMessage('ai', data.answer);
+        loadSessions();
+    } catch (error) {
+        appendMessage('ai', "Sistemle bağlantı kurulurken bir hata oluştu. Lütfen tekrar deneyiniz.");
+    } finally {
+        document.getElementById("loadingText").style.display = "none";
+    }
+}
+
 function newChat() {
     currentSessionId = null;
-    document.getElementById("chatBox").innerHTML = "";
+    document.getElementById("chatBox").innerHTML = `
+        <div class="message ai-msg">
+            <div class="ai-header">
+                <div class="university-icon" style="width:20px; height:20px; font-size:10px;">AÜ</div>
+                Acıbadem Akademik Rehber
+            </div>
+            <div class="content">Yeni bir konu hakkında yardımcı olmaya hazırım. Ne sormak istersiniz?</div>
+        </div>`;
+    loadSessions();
 }
 
-/* ENTER */
-function handleKeyPress(e) {
-    if (e.key === "Enter") sendMessage();
-}
-
-/* SAYFA AÇILINCA */
+function handleKeyPress(e) { if (e.key === "Enter") sendMessage(); }
 window.onload = loadSessions;
-
 </script>
+
 </body>
 </html>
