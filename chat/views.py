@@ -8,6 +8,7 @@ from scraper.models import AcibademData
 from .models import ChatMessage, ChatSession
 from django.db.models import Q
 from .faq import FAQ_DATA
+from .title_generator import generate_chat_title
 
 
 def chat_interface(request):
@@ -65,9 +66,13 @@ def chat_api(request):
                 try:
                     session = ChatSession.objects.get(id=session_id)
                 except ChatSession.DoesNotExist:
-                    session = ChatSession.objects.create(title=user_question[:30])
+                    session = ChatSession.objects.create(
+    title=generate_chat_title(user_question)
+)
             else:
-                session = ChatSession.objects.create(title=user_question[:30])
+                session = ChatSession.objects.create(
+    title=generate_chat_title(user_question)
+)
 
             user_lower = user_question.lower()
             for item in FAQ_DATA:
