@@ -6,15 +6,16 @@ from django.views.decorators.csrf import csrf_exempt
 from scraper.models import AcibademData
 from .models import ChatMessage
 from django.db.models import Q
+from pgvector.django import CosineDistance
 
 
-# kullanıcıların sohbet edeceği sayfa
+# kullanıcıların sohbet edeceği arayüz sayfası
 def chat_interface(request):
     return render(request, 'chat/index.html')
 
 
-# 2. yapay zeka ile haberleşen api
-@csrf_exempt  # şimdilik api testini kolaylaştırmak için CSRF esnetme (uygulamalar arası geçişte problem yaratabiliyor)
+# yapay zeka ile haberleşen API
+@csrf_exempt
 def chat_api(request):
     if request.method == 'POST':
         try:
@@ -22,26 +23,31 @@ def chat_api(request):
             data = json.loads(request.body)
             user_question = data.get('question', '')
 
-            # kullanıcının sorusundaki kelimeleri ayır ve 3 harften büyükleri al
-            keywords = [word for word in user_question.lower().split() if len(word) > 3]
+            # vektörel arama (semantik)
+            question_embedding = None
+            try:
+                # önce kullanıcının sorusunu vektöre çeviriyoruz
+                embed_response = requests.post('http://llm:11434/api/embeddings', json={
+                    "model": "nomic-embed-text",
+                    "prompt": user_question
+                })
+                question_embedding = embed_response.json().get('embedding')
+            except Exception as e:
+                print(f"Soru vektöre çevrilemedi: {e}")
 
-            query = Q()
-            for word in keywords:
-                # hem sayfa başlığında hem de içerikte bu kelimeleri ara
-                query |= Q(content__icontains=word) | Q(title__icontains=word)
+            # 2. veritabanındaki metinlerin vektörleriyle, sorunun vektörünü karşılaştır
+            if question_embedding:
+                # cosinedistance ile anlamsal olarak en yakın 3 parçayı getir
+                acibadem_data = AcibademData.objects.filter(embedding__isnull=False).order_by(
+                    CosineDistance('embedding', question_embedding)
+                )[:8]
+            else:
+                acibadem_data = AcibademData.objects.all()[:8]
 
-            # sorudaki kelimelerle eşleşen en alakalı 3 sayfayı getir (şimdilik 3 sayfa)
-            acibadem_data = AcibademData.objects.filter(query).distinct()[:3]
+            # bulunan parçaları metinleştir
+            context_text = "\n\n".join([f"--- {item.title} ---\n{item.content}" for item in acibadem_data])
 
-            # eğer sorulan kelimelerle ilgili hiçbir sayfa bulamazsa genel bilgi vermek için rastgele 3 sayfa al
-            if not acibadem_data.exists():
-                acibadem_data = AcibademData.objects.all()[:3]
-
-            # bulunan sayfaların ilk 2500 karakterini al
-            context_text = "\n\n".join([f"--- {item.title} ---\n{item.content[:2500]}" for item in acibadem_data])
-
-            # sohbet geçmişi /*/*/*/*/*/*/*/*
-            # database den son 3 sohbeti al (eskiden yeniye)
+            # sohbet geçmişi
             recent_chats = ChatMessage.objects.order_by('-created_at')[:3]
             history_text = ""
             if recent_chats:
@@ -50,7 +56,7 @@ def chat_api(request):
             else:
                 history_text = "Bu ilk konuşmamız, henüz geçmiş yok."
 
-            # yapay zekaya kim olduğunu ve elindeki verileri söylüyoruz
+            # prompt
             prompt = f"""Sen Acıbadem Üniversitesi için tasarlanmış resmi ve yardımsever bir yapay zeka asistanısın. 
             Aşağıda sana üniversitenin web sitesinden toplanmış bazı güncel bilgiler (Context) ve bizim seninle olan önceki konuşmalarımızın geçmişini (Geçmiş) veriyorum. 
             Lütfen kullanıcının sorusunu SADECE bu bilgilere ve geçmiş konuşmalarımıza dayanarak yanıtla. 
@@ -67,21 +73,21 @@ def chat_api(request):
             Kullanıcının Sorusu: {user_question}
             Cevabın:"""
 
-            # llm */*/*/*/**/*/*/
-            # dockerdeki lokal llm e yolla
+            # docker daki llm e gönder
             ollama_url = "http://llm:11434/api/generate"
             payload = {
-                "model": "qwen2.5:3b",  # indirdiğim modelin tam adı
+                "model": "qwen2.5:3b",
                 "prompt": prompt,
-                "stream": False  # cevabı kelime kelime değil tek seferde bütün olarak almak için
+                "stream": False
             }
 
             response = requests.post(ollama_url, json=payload)
-            response.raise_for_status()  # eğer sunucudan hata dönerse tut
+            response.raise_for_status()
 
             ai_answer = response.json().get('response', '')
 
-            ChatMessage.objects.create(   # sohbeti database e kaydet
+            # sohbeti kaydet
+            ChatMessage.objects.create(
                 user_message=user_question,
                 ai_response=ai_answer
             )
