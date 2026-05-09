@@ -346,7 +346,13 @@ async function sendMessage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ question: question, session_id: currentSessionId })
         });
+        
         const data = await res.json();
+
+        if (!res.ok) {
+            appendMessage('ai', "Hata: " + (data.error || "Bilinmeyen bir hata oluştu."));
+            return;
+        }
 
         currentSessionId = data.session_id;
         appendMessage('ai', data.answer);

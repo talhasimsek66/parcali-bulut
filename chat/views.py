@@ -115,12 +115,12 @@ def chat_api(request):
             acibadem_data = [item for score, item in scored_results[:top_k]]
 
             if not acibadem_data:
-                acibadem_data = list(AcibademData.objects.all()[:top_k])
-
-            context_text = "\n\n".join([
-                f"--- {item.title} ---\n{item.content[:2500]}"
-                for item in acibadem_data
-            ])
+                context_text = "SORU İLE İLGİLİ VERİTABANINDA BİLGİ BULUNAMADI."
+            else:
+                context_text = "\n\n".join([
+                    f"--- {item.title} ---\n{item.content[:2500]}"
+                    for item in acibadem_data
+                ])
 
             recent_chats = ChatMessage.objects.filter(session=session).order_by('-created_at')[:3]
 

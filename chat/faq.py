@@ -10,7 +10,7 @@ FAQ_DATA = [
         "answer": "İletişim için: +90 (216) 500 44 44 veya info@acibadem.edu.tr"
     },
     {
-        "keywords": ["bilgisayar mühendisliği", "bölüm", "ceng"],
+        "keywords": ["bilgisayar mühendisliği", "ceng"],
         "answer": "Acıbadem Üniversitesi Bilgisayar Mühendisliği bölümü modern eğitim sunar ve İngilizce eğitim verilmektedir."
     }
 ]
