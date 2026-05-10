@@ -5,3 +5,4 @@ beautifulsoup4>=4.12
 selenium>=4.18.0
 python-dotenv>=1.0.0
 pgvector>=0.2.5
+langchain-text-splitters==0.0.1

@@ -24,7 +24,7 @@ class ChatMessage(models.Model):
     class Meta:
         verbose_name = "Sohbet Geçmişi"
         verbose_name_plural = "Sohbet Geçmişleri"
-        ordering = ['created_at']  # Akış için eskiden yeniye sıralandı
+        ordering = ['created_at']
 
     def __str__(self):
         return f"Soru: {self.user_message[:50]}..."
