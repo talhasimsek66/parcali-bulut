@@ -3,8 +3,9 @@
 import requests
 import json
 from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse, StreamingHttpResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from scraper.models import AcibademData
 from .models import ChatMessage, ChatSession
 from django.db.models import Q
@@ -32,6 +33,17 @@ def get_chat_history(request, session_id):
         for msg in messages
     ]
     return JsonResponse({'messages': history})
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_session(request, session_id):
+    try:
+        session = ChatSession.objects.get(pk=session_id)
+    except ChatSession.DoesNotExist:
+        return JsonResponse({"error": "Oturum bulunamadı."}, status=404)
+    session.delete()
+    return HttpResponse(status=204)
 
 
 # llm iletişim api si
