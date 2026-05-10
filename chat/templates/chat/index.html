@@ -48,12 +48,22 @@
         /* --- SOL MENÜ (SIDEBAR) --- */
         .sidebar {
             width: 280px;
+            min-width: 0;
+            flex-shrink: 0;
             background-color: var(--bg-sidebar);
             border-right: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            transition: transform 0.3s ease;
+            transition: width 0.3s ease, opacity 0.25s ease, border-color 0.25s ease, transform 0.3s ease;
             z-index: 20;
+            overflow: hidden;
+        }
+
+        body.sidebar-collapsed .sidebar {
+            width: 0;
+            opacity: 0;
+            border-right-color: transparent;
+            pointer-events: none;
         }
 
         .sidebar-header {
@@ -102,22 +112,125 @@
         .history-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 10px; }
 
         .history-item {
-            padding: 12px 16px;
+            position: relative;
+            padding: 8px 10px 8px 12px;
             margin-bottom: 4px;
             border-radius: var(--radius-sm);
             color: var(--text-muted);
-            cursor: pointer;
             font-size: 0.9rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: background 0.2s, color 0.2s;
+            overflow: visible;
+        }
+
+        .history-item-main {
+            flex: 1;
+            min-width: 0;
             display: flex;
             align-items: center;
             gap: 10px;
-            transition: all 0.2s;
+            padding: 4px 0 4px 4px;
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
         }
 
-        .history-item i { font-size: 0.85rem; }
+        .history-item-main > i { font-size: 0.85rem; flex-shrink: 0; }
+
+        .history-item-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .history-item-menu-wrap {
+            position: relative;
+            flex-shrink: 0;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s ease;
+        }
+
+        .history-item:hover .history-item-menu-wrap,
+        .history-item:focus-within .history-item-menu-wrap {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .history-item-menu-wrap {
+                opacity: 1;
+                pointer-events: auto;
+            }
+        }
+
+        .history-item-kebab {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 8px 10px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+
+        .history-item-kebab:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .history-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 2px;
+            min-width: 132px;
+            padding: 4px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+            z-index: 50;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.12s ease, visibility 0.12s ease;
+        }
+
+        .history-item-menu-wrap:hover .history-dropdown {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        .history-delete-btn {
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            border: none;
+            border-radius: 6px;
+            background: none;
+            color: var(--text-main);
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: inherit;
+        }
+
+        .history-delete-btn:hover {
+            background: rgba(239, 68, 68, 0.12);
+            color: #f87171;
+        }
+
+        .history-delete-btn i { font-size: 0.85rem; width: 1em; text-align: center; }
+
         .history-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-main); }
         .history-item.active { background: var(--bg-surface); color: var(--text-main); font-weight: 500; border: 1px solid var(--border-color); }
 
@@ -141,12 +254,25 @@
         }
 
         .menu-toggle {
-            display: none;
-            background: none;
-            border: none;
-            color: var(--text-main);
-            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            flex-shrink: 0;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            background: rgba(30, 41, 59, 0.75);
+            color: var(--text-muted);
+            font-size: 1rem;
             cursor: pointer;
+            transition: border-color 0.2s, color 0.2s, background 0.2s;
+        }
+
+        .menu-toggle:hover {
+            border-color: var(--primary);
+            color: var(--text-main);
+            background: rgba(30, 41, 59, 0.95);
         }
 
         .chat-container {
@@ -295,9 +421,24 @@
         /* Mobil Uyum */
         @media (max-width: 850px) {
             .chat-container, .input-wrapper { padding-left: 5%; padding-right: 5%; }
-            .sidebar { position: absolute; height: 100%; transform: translateX(-100%); }
-            .sidebar.open { transform: translateX(0); box-shadow: 5px 0 25px rgba(0,0,0,0.5); }
-            .menu-toggle { display: block; }
+            .sidebar {
+                position: absolute;
+                height: 100%;
+                width: 280px;
+                transform: translateX(-100%);
+                opacity: 1;
+                pointer-events: auto;
+                border-right: 1px solid var(--border-color);
+            }
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 5px 0 25px rgba(0, 0, 0, 0.5);
+            }
+            body.sidebar-collapsed .sidebar {
+                width: 280px;
+                opacity: 1;
+                pointer-events: auto;
+            }
         }
     </style>
 </head>
@@ -315,9 +456,22 @@
 
         <div class="history-list" id="historyList">
             {% for s in sessions %}
-            <div class="history-item" onclick="loadChat('{{ s.id }}')" id="item-{{ s.id }}">
-                <i class="fa-regular fa-message"></i>
-                {{ s.title }}
+            <div class="history-item" id="item-{{ s.id }}">
+                <div class="history-item-main" onclick="loadChat('{{ s.id }}')">
+                    <i class="fa-regular fa-message"></i>
+                    <span class="history-item-title">{{ s.title }}</span>
+                </div>
+                <div class="history-item-menu-wrap" onclick="event.stopPropagation()">
+                    <button type="button" class="history-item-kebab" aria-label="Sohbet seçenekleri">
+                        <i class="fa-solid fa-ellipsis-vertical"></i>
+                    </button>
+                    <div class="history-dropdown">
+                        <button type="button" class="history-delete-btn" onclick="deleteSession('{{ s.id }}', event)">
+                            <i class="fa-solid fa-trash"></i>
+                            Sil
+                        </button>
+                    </div>
+                </div>
             </div>
             {% endfor %}
         </div>
@@ -325,8 +479,8 @@
 
     <main class="main-content">
         <div class="top-nav">
-            <button class="menu-toggle" onclick="toggleSidebar()">
-                <i class="fa-solid fa-bars"></i>
+            <button type="button" class="menu-toggle" id="menuToggleBtn" onclick="toggleSidebar()" aria-label="Yan menüyü aç veya kapat" aria-expanded="true">
+                <i class="fa-solid fa-bars" id="menuToggleIcon"></i>
             </button>
             <span style="font-weight: 500; font-size: 1.1rem; color: var(--text-muted);">Asistan</span>
         </div>
@@ -356,12 +510,53 @@
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
         const sidebar = document.getElementById('sidebar');
+        const menuToggleIcon = document.getElementById('menuToggleIcon');
+        const menuToggleBtn = document.getElementById('menuToggleBtn');
         let currentSessionId = null;
 
-        // Mobil menü aç/kapa
-        function toggleSidebar() {
-            sidebar.classList.toggle('open');
+        function isMobileLayout() {
+            return window.innerWidth <= 850;
         }
+
+        function syncSidebarToggleUi() {
+            if (!menuToggleBtn || !menuToggleIcon) return;
+            if (isMobileLayout()) {
+                const open = sidebar.classList.contains('open');
+                menuToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                menuToggleIcon.className = open ? 'fa-solid fa-xmark' : 'fa-solid fa-bars';
+            } else {
+                const collapsed = document.body.classList.contains('sidebar-collapsed');
+                menuToggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                menuToggleIcon.className = collapsed ? 'fa-solid fa-bars' : 'fa-solid fa-angles-left';
+            }
+        }
+
+        // Masaüstü: sidebar daralt / genişlet. Mobil: üst üste drawer aç/kapa.
+        function toggleSidebar() {
+            if (isMobileLayout()) {
+                sidebar.classList.toggle('open');
+            } else {
+                document.body.classList.toggle('sidebar-collapsed');
+            }
+            syncSidebarToggleUi();
+        }
+
+        function closeSidebarMobile() {
+            if (!isMobileLayout()) return;
+            sidebar.classList.remove('open');
+            syncSidebarToggleUi();
+        }
+
+        window.addEventListener('resize', () => {
+            if (isMobileLayout()) {
+                document.body.classList.remove('sidebar-collapsed');
+            } else {
+                sidebar.classList.remove('open');
+            }
+            syncSidebarToggleUi();
+        });
+
+        syncSidebarToggleUi();
 
         // Textarea otomatik boyutlandırma
         function autoResize(el) {
@@ -373,6 +568,19 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
+        async function deleteSession(id, ev) {
+            ev.stopPropagation();
+            try {
+                const response = await fetch(`/api/session/${id}/`, { method: 'DELETE' });
+                if (!response.ok && response.status !== 404) return;
+                document.getElementById(`item-${id}`)?.remove();
+                if (currentSessionId === id) {
+                    currentSessionId = null;
+                    startNewChat();
+                }
+            } catch (_) { /* sessiz */ }
+        }
+
         function startNewChat() {
             currentSessionId = null;
             chatBox.innerHTML = `
@@ -381,7 +589,7 @@
                     <div class="message-bubble"><p>Yeni bir sohbet başlattınız. Sizi dinliyorum.</p></div>
                 </div>`;
             document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
-            if(window.innerWidth <= 850) toggleSidebar(); // Mobilde menüyü kapat
+            closeSidebarMobile();
         }
 
         async function loadChat(id) {
@@ -389,8 +597,8 @@
             document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
             document.getElementById(`item-${id}`).classList.add('active');
             
-            if(window.innerWidth <= 850) toggleSidebar(); // Mobilde menüyü kapat
-            
+            closeSidebarMobile();
+
             chatBox.innerHTML = '<div style="text-align:center; color: var(--text-muted); margin-top: 40px;"><div class="typing"><span></span><span></span><span></span></div></div>';
             
             try {
