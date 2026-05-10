@@ -234,6 +234,130 @@
         .history-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-main); }
         .history-item.active { background: var(--bg-surface); color: var(--text-main); font-weight: 500; border: 1px solid var(--border-color); }
 
+        .sidebar-footer {
+            flex-shrink: 0;
+            padding: 12px 16px 16px;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-sidebar);
+        }
+
+        .faq-sidebar-btn {
+            width: 100%;
+            padding: 11px 14px;
+            background: rgba(14, 165, 233, 0.12);
+            color: var(--primary);
+            border: 1px solid rgba(14, 165, 233, 0.35);
+            border-radius: var(--radius-sm);
+            font-weight: 500;
+            font-size: 0.88rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+            font-family: inherit;
+        }
+
+        .faq-sidebar-btn:hover {
+            background: rgba(14, 165, 233, 0.2);
+            border-color: var(--primary);
+            color: #7dd3fc;
+        }
+
+        .faq-modal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(6px);
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .faq-modal-backdrop.is-open {
+            display: flex;
+        }
+
+        .faq-modal-card {
+            width: 100%;
+            max-width: 420px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 22px 22px 18px;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+        }
+
+        .faq-modal-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .faq-modal-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--text-main);
+            line-height: 1.35;
+        }
+
+        .faq-modal-sub {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .faq-modal-close {
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .faq-modal-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+        }
+
+        .faq-q-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .faq-q-btn {
+            width: 100%;
+            text-align: left;
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: rgba(15, 23, 42, 0.5);
+            color: var(--text-main);
+            font-size: 0.9rem;
+            line-height: 1.45;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            font-family: inherit;
+        }
+
+        .faq-q-btn:hover {
+            border-color: var(--primary);
+            background: rgba(14, 165, 233, 0.1);
+        }
+
         /* --- ANA SOHBET ALANI --- */
         .main-content {
             flex: 1;
@@ -329,6 +453,13 @@
 
         .msg-copy-btn.copied {
             color: #4ade80;
+        }
+
+        .msg-actions-row {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 2px;
         }
 
         .message-avatar {
@@ -512,7 +643,36 @@
             </div>
             {% endfor %}
         </div>
+
+        <div class="sidebar-footer">
+            <button type="button" class="faq-sidebar-btn" id="faqOpenBtn" onclick="openFaqModal()" aria-haspopup="dialog" aria-controls="faqModal">
+                <i class="fa-solid fa-circle-question"></i>
+                En çok sorulan sorular
+            </button>
+        </div>
     </aside>
+
+    <div class="faq-modal-backdrop" id="faqModal" role="dialog" aria-modal="true" aria-labelledby="faqModalTitle" aria-hidden="true" onclick="if (event.target === this) closeFaqModal()">
+        <div class="faq-modal-card" onclick="event.stopPropagation()">
+            <div class="faq-modal-head">
+                <div>
+                    <div class="faq-modal-title" id="faqModalTitle">Sık sorulanlar</div>
+                    <div class="faq-modal-sub">Bir soru seçin; sohbete gönderilir.</div>
+                </div>
+                <button type="button" class="faq-modal-close" onclick="closeFaqModal()" aria-label="Kapat">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="faq-q-list">
+                <button type="button" class="faq-q-btn" data-question="Ahmet Bulut kimdir?" onclick="sendSuggestedFromFaq(this.getAttribute('data-question'))">
+                    1. Ahmet Bulut kimdir?
+                </button>
+                <button type="button" class="faq-q-btn" data-question="Bilgisayar mühendisliği bölümü kaç yıllıktır?" onclick="sendSuggestedFromFaq(this.getAttribute('data-question'))">
+                    2. Bilgisayar mühendisliği bölümü kaç yıllıktır?
+                </button>
+            </div>
+        </div>
+    </div>
 
     <main class="main-content">
         <div class="top-nav">
@@ -530,9 +690,11 @@
                         <p>Merhaba! Ben Acıbadem Üniversitesi Yapay Zeka Asistanıyım.</p>
                         <p>Size üniversite programları, kayıtlar, ders içerikleri veya iletişim bilgileri hakkında nasıl yardımcı olabilirim?</p>
                     </div>
-                    <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
-                        <i class="fa-regular fa-copy"></i>
-                    </button>
+                    <div class="msg-actions-row">
+                        <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -600,6 +762,44 @@
 
         syncSidebarToggleUi();
 
+        function openFaqModal() {
+            const modal = document.getElementById('faqModal');
+            if (!modal) return;
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+            const firstQ = modal.querySelector('.faq-q-btn');
+            if (firstQ) firstQ.focus();
+        }
+
+        function closeFaqModal(restoreFocus = true) {
+            const modal = document.getElementById('faqModal');
+            if (!modal) return;
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+            if (restoreFocus) {
+                const opener = document.getElementById('faqOpenBtn');
+                if (opener) opener.focus();
+            }
+        }
+
+        function sendSuggestedFromFaq(question) {
+            if (!question || !String(question).trim()) return;
+            closeFaqModal(false);
+            closeSidebarMobile();
+            userInput.value = String(question).trim();
+            autoResize(userInput);
+            sendMessage();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('faqModal');
+            if (!modal || !modal.classList.contains('is-open')) return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeFaqModal();
+            }
+        });
+
         // Textarea otomatik boyutlandırma
         function autoResize(el) {
             el.style.height = 'auto';
@@ -651,9 +851,11 @@
                     <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
                     <div class="message-column">
                         <div class="message-bubble"><p>Yeni bir sohbet başlattınız. Sizi dinliyorum.</p></div>
-                        <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
-                            <i class="fa-regular fa-copy"></i>
-                        </button>
+                        <div class="msg-actions-row">
+                            <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>`;
             document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
@@ -676,7 +878,7 @@
                 chatBox.innerHTML = "";
                 data.messages.forEach(m => {
                     appendUserMessage(m.user_message);
-                    appendAIMessage(m.ai_response, true); // true = zaten markdown yapılmış
+                    appendAIMessage(m.ai_response, true);
                 });
                 scrollToBottom();
             } catch (error) {
@@ -689,9 +891,11 @@
                 <div class="message-row user">
                     <div class="message-column">
                         <div class="message-bubble">${escapeHTML(text)}</div>
-                        <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
-                            <i class="fa-regular fa-copy"></i>
-                        </button>
+                        <div class="msg-actions-row">
+                            <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>`;
             chatBox.insertAdjacentHTML('beforeend', html);
@@ -704,9 +908,11 @@
                     <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
                     <div class="message-column">
                         <div class="message-bubble ai-content">${content}</div>
-                        <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
-                            <i class="fa-regular fa-copy"></i>
-                        </button>
+                        <div class="msg-actions-row">
+                            <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>`;
             chatBox.insertAdjacentHTML('beforeend', html);
@@ -746,15 +952,22 @@
 
                 document.getElementById('typingIndicator')?.remove();
 
-                if (!response.ok) throw new Error("Sunucu hatası");
+                if (!response.ok) {
+                    let errDetail = 'Sunucu hatası';
+                    try {
+                        const errBody = await response.json();
+                        if (errBody && errBody.error) errDetail = errBody.error;
+                    } catch (_) { /* yok */ }
+                    throw new Error(errDetail);
+                }
 
                 const newSessionId = response.headers.get('X-Session-ID');
                 const isFirstMessage = !currentSessionId && newSessionId;
                 if (isFirstMessage) currentSessionId = newSessionId;
 
-                const msgContentDiv = appendAIMessage(""); // Boş balon oluştur
-                
-                // Stream Okuma
+                const msgContentDiv = appendAIMessage('', false);
+                if (!msgContentDiv) throw new Error('Mesaj balonu oluşturulamadı.');
+
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder("utf-8");
                 let fullText = "";
@@ -774,7 +987,8 @@
 
             } catch (error) {
                 document.getElementById('typingIndicator')?.remove();
-                appendAIMessage("<span style='color:#ef4444;'>Sunucuya bağlanılamadı veya bir hata oluştu.</span>");
+                const errMsg = (error && error.message) ? escapeHTML(error.message) : 'Sunucuya bağlanılamadı veya bir hata oluştu.';
+                appendAIMessage(`<span style='color:#ef4444;'>${errMsg}</span>`, false);
             } finally {
                 sendBtn.disabled = false;
                 scrollToBottom();
