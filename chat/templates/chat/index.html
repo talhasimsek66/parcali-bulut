@@ -294,6 +294,43 @@
         .message-row.user { justify-content: flex-end; }
         .message-row.ai { justify-content: flex-start; }
 
+        .message-column {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            max-width: 80%;
+            gap: 6px;
+        }
+
+        .message-row.user .message-column {
+            align-items: flex-end;
+            margin-left: auto;
+        }
+
+        .msg-copy-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 6px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 1rem;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
+        }
+
+        .msg-copy-btn:hover {
+            color: var(--primary);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .msg-copy-btn.copied {
+            color: #4ade80;
+        }
+
         .message-avatar {
             width: 36px;
             height: 36px;
@@ -488,9 +525,14 @@
         <div class="chat-container" id="chatBox">
             <div class="message-row ai">
                 <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
-                <div class="message-bubble">
-                    <p>Merhaba! Ben Acıbadem Üniversitesi Yapay Zeka Asistanıyım.</p>
-                    <p>Size üniversite programları, kayıtlar, ders içerikleri veya iletişim bilgileri hakkında nasıl yardımcı olabilirim?</p>
+                <div class="message-column">
+                    <div class="message-bubble">
+                        <p>Merhaba! Ben Acıbadem Üniversitesi Yapay Zeka Asistanıyım.</p>
+                        <p>Size üniversite programları, kayıtlar, ders içerikleri veya iletişim bilgileri hakkında nasıl yardımcı olabilirim?</p>
+                    </div>
+                    <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
                 </div>
             </div>
         </div>
@@ -568,6 +610,27 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
+        function copyMessageText(btn) {
+            const col = btn.closest('.message-column');
+            if (!col) return;
+            const bubble = col.querySelector('.message-bubble');
+            if (!bubble) return;
+            const text = bubble.innerText || '';
+            const icon = btn.querySelector('i');
+            navigator.clipboard.writeText(text).then(() => {
+                btn.classList.add('copied');
+                if (icon) {
+                    icon.className = 'fa-solid fa-check';
+                }
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    if (icon) {
+                        icon.className = 'fa-regular fa-copy';
+                    }
+                }, 1600);
+            }).catch(() => { /* sessiz */ });
+        }
+
         async function deleteSession(id, ev) {
             ev.stopPropagation();
             try {
@@ -586,7 +649,12 @@
             chatBox.innerHTML = `
                 <div class="message-row ai">
                     <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
-                    <div class="message-bubble"><p>Yeni bir sohbet başlattınız. Sizi dinliyorum.</p></div>
+                    <div class="message-column">
+                        <div class="message-bubble"><p>Yeni bir sohbet başlattınız. Sizi dinliyorum.</p></div>
+                        <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
                 </div>`;
             document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
             closeSidebarMobile();
@@ -619,7 +687,12 @@
         function appendUserMessage(text) {
             const html = `
                 <div class="message-row user">
-                    <div class="message-bubble">${escapeHTML(text)}</div>
+                    <div class="message-column">
+                        <div class="message-bubble">${escapeHTML(text)}</div>
+                        <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
                 </div>`;
             chatBox.insertAdjacentHTML('beforeend', html);
         }
@@ -629,7 +702,12 @@
             const html = `
                 <div class="message-row ai">
                     <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
-                    <div class="message-bubble ai-content">${content}</div>
+                    <div class="message-column">
+                        <div class="message-bubble ai-content">${content}</div>
+                        <button type="button" class="msg-copy-btn" onclick="copyMessageText(this)" aria-label="Metni kopyala" title="Kopyala">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
                 </div>`;
             chatBox.insertAdjacentHTML('beforeend', html);
             return chatBox.lastElementChild.querySelector('.ai-content');
@@ -639,7 +717,9 @@
             const html = `
                 <div class="message-row ai" id="typingIndicator">
                     <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
-                    <div class="message-bubble"><div class="typing"><span></span><span></span><span></span></div></div>
+                    <div class="message-column">
+                        <div class="message-bubble"><div class="typing"><span></span><span></span><span></span></div></div>
+                    </div>
                 </div>`;
             chatBox.insertAdjacentHTML('beforeend', html);
         }
