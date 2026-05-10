@@ -1,3 +1,5 @@
+# scraper/management/commands/veri_cek.py
+
 import json
 import time
 import requests

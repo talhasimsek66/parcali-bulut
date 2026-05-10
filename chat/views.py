@@ -1,15 +1,27 @@
+# chat/views.py
+
 import requests
 import json
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from scraper.models import AcibademData
-from .models import ChatMessage
+from .models import ChatMessage, ChatSession
 from django.db.models import Q
 from pgvector.django import CosineDistance
 
 def chat_interface(request):
-    return render(request, 'chat/index.html')
+    sessions = ChatSession.objects.all().order_by('-created_at')
+    return render(request, 'chat/index.html', {'sessions': sessions})
+
+def get_chat_history(request, session_id):
+    session = get_object_or_404(ChatSession, id=session_id)
+    messages = session.messages.all().order_by('created_at')
+    history = [
+        {'user_message': msg.user_message, 'ai_response': msg.ai_response}
+        for msg in messages
+    ]
+    return JsonResponse({'messages': history})
 
 @csrf_exempt
 def chat_api(request):
@@ -17,6 +29,14 @@ def chat_api(request):
         try:
             data = json.loads(request.body)
             user_question = data.get('question', '')
+            session_id = data.get('session_id')
+
+            # Oturumu Bul veya Oluştur
+            if session_id:
+                session = ChatSession.objects.get(id=session_id)
+            else:
+                title = user_question[:40] + ("..." if len(user_question) > 40 else "")
+                session = ChatSession.objects.create(title=title)
 
             question_embedding = None
             try:
@@ -37,13 +57,14 @@ def chat_api(request):
 
             context_text = "\n\n".join([f"--- {item.title} ---\n{item.content}" for item in acibadem_data])
 
-            recent_chats = ChatMessage.objects.order_by('-created_at')[:3]
+            # SADECE mevcut oturumun geçmişini al
+            recent_chats = session.messages.all().order_by('-created_at')[:5]
             history_text = ""
             if recent_chats:
                 for chat in reversed(recent_chats):
                     history_text += f"Kullanıcı: {chat.user_message}\nAsistan: {chat.ai_response}\n\n"
             else:
-                history_text = "Bu ilk konuşmamız, henüz geçmiş yok."
+                history_text = "Bu oturumdaki ilk konuşmamız."
 
             prompt = f"""Sen Acıbadem Üniversitesi için tasarlanmış resmi ve yardımsever bir yapay zeka asistanısın. 
             Aşağıda sana üniversitenin web sitesinden toplanmış bazı güncel bilgiler (Context) ve bizim seninle olan önceki konuşmalarımızın geçmişini (Geçmiş) veriyorum. 
@@ -70,7 +91,6 @@ def chat_api(request):
 
             def stream_response():
                 full_response = ""
-
                 with requests.post(ollama_url, json=payload, stream=True) as r:
                     r.raise_for_status()
                     for line in r.iter_lines():
@@ -81,11 +101,14 @@ def chat_api(request):
                             yield chunk
 
                 ChatMessage.objects.create(
+                    session=session,
                     user_message=user_question,
                     ai_response=full_response
                 )
 
-            return StreamingHttpResponse(stream_response(), content_type='text/plain')
+            response = StreamingHttpResponse(stream_response(), content_type='text/plain')
+            response['X-Session-ID'] = str(session.id)
+            return response
 
         except Exception as e:
             return JsonResponse({'error': f"Yapay zeka sunucusuna ulaşılamadı: {str(e)}"}, status=500)
