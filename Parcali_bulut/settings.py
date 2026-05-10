@@ -4,12 +4,6 @@ from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-STATIC_URL = '/static/'
-
-
-STATICFILES_DIRS = [
-        os.path.join(BASE_DIR, 'static'),
-    ]
 
 
 env_path = os.path.join(BASE_DIR, '.env')
@@ -99,7 +93,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Europe/Istanbul"
 
 USE_I18N = True
 

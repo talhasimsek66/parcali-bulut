@@ -1,185 +1,129 @@
 import requests
 import json
-from django.shortcuts import render
-from django.http import JsonResponse
+from django.shortcuts import render, get_object_or_404
+from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET
 from scraper.models import AcibademData
 from .models import ChatMessage, ChatSession
 from django.db.models import Q
-from .faq import FAQ_DATA
-from .title_generator import generate_chat_title
+from pgvector.django import CosineDistance
 
-
+# 1. Ana Arayüz: Sol menüde listelenmek üzere tüm geçmiş sohbetleri gönderir
 def chat_interface(request):
-    return render(request, 'chat/index.html')
-
-
-@require_GET
-def get_session_messages(request, session_id):
-    try:
-        session = ChatSession.objects.get(id=session_id)
-        messages = session.messages.order_by('created_at')
-
-        data = [
-            {
-                "user": m.user_message,
-                "ai": m.ai_response
-            }
-            for m in messages
-        ]
-
-        return JsonResponse({"messages": data})
-
-    except ChatSession.DoesNotExist:
-        return JsonResponse({"error": "Session bulunamadı"}, status=404)
-
-
-@require_GET
-def chat_sessions(request):
     sessions = ChatSession.objects.all().order_by('-created_at')
+    return render(request, 'chat/index.html', {'sessions': sessions})
 
-    data = [
+# 2. Geçmişi Getir: Sol menüden bir sohbete tıklandığında o sohbetin mesajlarını yükler
+def get_chat_history(request, session_id):
+    session = get_object_or_404(ChatSession, id=session_id)
+    messages = session.messages.all().order_by('created_at')
+    history = [
         {
-            "id": s.id,
-            "title": s.title
-        }
-        for s in sessions
+            'user_message': msg.user_message,
+            'ai_response': msg.ai_response
+        } for msg in messages
     ]
+    return JsonResponse({'messages': history})
 
-    return JsonResponse({"sessions": data})
-
-
+# 3. Chat API: Akış (Streaming) desteği ve oturum yönetimi ile asıl işlemi yapar
 @csrf_exempt
 def chat_api(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            user_question = data.get('question', '').strip()
+            user_question = data.get('question', '')
+            session_id = data.get('session_id')  # Frontend'den gelen oturum ID'si
 
-            if not user_question:
-                return JsonResponse({"error": "Boş soru gönderilemez"}, status=400)
-
-            session_id = data.get('session_id')
-
+            # --- A. OTURUM YÖNETİMİ ---
+            # Eğer session_id yoksa (yeni sohbetse) yeni bir oturum oluştur
             if session_id:
-                try:
-                    session = ChatSession.objects.get(id=session_id)
-                except ChatSession.DoesNotExist:
-                    session = ChatSession.objects.create(
-    title=generate_chat_title(user_question)
-)
+                session = ChatSession.objects.get(id=session_id)
             else:
-                session = ChatSession.objects.create(
-    title=generate_chat_title(user_question)
-)
+                # İlk sorudan otomatik bir başlık oluştur (Gemini mantığı)
+                title = user_question[:40] + ("..." if len(user_question) > 40 else "")
+                session = ChatSession.objects.create(title=title)
 
-            user_lower = user_question.lower()
-            for item in FAQ_DATA:
-                if any(keyword in user_lower for keyword in item["keywords"]):
-                    ai_answer = item["answer"]
+            # --- B. VEKTÖREL ARAMA (RAG) ---
+            question_embedding = None
+            try:
+                # Kullanıcının sorusunu Ollama üzerinden vektöre çeviriyoruz
+                embed_response = requests.post('http://llm:11434/api/embeddings', json={
+                    "model": "nomic-embed-text",
+                    "prompt": user_question
+                })
+                question_embedding = embed_response.json().get('embedding')
+            except Exception as e:
+                print(f"Vektörleştirme hatası: {e}")
 
-                    ChatMessage.objects.create(
-                        session=session,
-                        user_message=user_question,
-                        ai_response=ai_answer
-                    )
-
-                    return JsonResponse({
-                        "answer": ai_answer,
-                        "session_id": session.id
-                    })
-
-            keywords = [word for word in user_lower.split() if len(word) > 3]
-
-            query = Q()
-            for word in keywords:
-                query |= Q(content__icontains=word) | Q(title__icontains=word)
-
-            results = AcibademData.objects.filter(query).distinct()
-
-            scored_results = []
-            for item in results:
-                score = 0
-                for word in keywords:
-                    if word in item.title.lower():
-                        score += 3
-                    if word in item.content.lower():
-                        score += 1
-                scored_results.append((score, item))
-
-            scored_results.sort(key=lambda x: x[0], reverse=True)
-
-            if len(user_question) < 30:
-                top_k = 2
-            elif len(user_question) < 80:
-                top_k = 3
+            # pgvector ile anlamsal olarak en yakın 8 döküman parçasını getir
+            if question_embedding:
+                acibadem_data = AcibademData.objects.filter(embedding__isnull=False).order_by(
+                    CosineDistance('embedding', question_embedding)
+                )[:8]
             else:
-                top_k = 5
+                acibadem_data = AcibademData.objects.all()[:8]
 
-            acibadem_data = [item for score, item in scored_results[:top_k]]
+            context_text = "\n\n".join([f"--- {item.title} ---\n{item.content}" for item in acibadem_data])
 
-            if not acibadem_data:
-                acibadem_data = list(AcibademData.objects.all()[:top_k])
-
-            context_text = "\n\n".join([
-                f"--- {item.title} ---\n{item.content[:2500]}"
-                for item in acibadem_data
-            ])
-
-            recent_chats = ChatMessage.objects.filter(session=session).order_by('-created_at')[:3]
-
+            # --- C. BELLEK (SESSION HISTORY) ---
+            # SADECE bu oturuma ait son 5 mesajı çekerek yapay zekaya "bağlam" olarak veriyoruz
+            recent_chats = session.messages.all().order_by('-created_at')[:5]
             history_text = ""
             if recent_chats:
                 for chat in reversed(recent_chats):
                     history_text += f"Kullanıcı: {chat.user_message}\nAsistan: {chat.ai_response}\n\n"
             else:
-                history_text = "Bu ilk konuşmamız, henüz geçmiş yok."
+                history_text = "Bu oturumdaki ilk konuşmamız."
 
+            # --- D. PROMPT HAZIRLIĞI ---
             prompt = f"""Sen Acıbadem Üniversitesi için tasarlanmış resmi ve yardımsever bir yapay zeka asistanısın. 
-Aşağıda sana üniversitenin web sitesinden toplanmış bazı güncel bilgiler (Context) ve önceki konuşmalarımız (Geçmiş) veriliyor. 
+Aşağıda sana üniversitenin web sitesinden toplanmış bazı güncel bilgiler (Context) ve bizim seninle olan önceki konuşmalarımızın geçmişini (Geçmiş) veriyorum. 
+Lütfen kullanıcının sorusunu SADECE bu bilgilere ve geçmiş konuşmalarımıza dayanarak yanıtla. 
+Eğer cevap bu bilgilerde yoksa "Bu konu hakkında elimde güncel bir bilgi bulunmuyor." de ve asla uydurma.
 
-SADECE bu verilere dayanarak cevap ver.
-Eğer bilgi yoksa kesinlikle uydurma.
-
-[GEÇMİŞ]
+[ÖNCEKİ KONUŞMALAR (GEÇMİŞ)]
 {history_text}
+[GEÇMİŞ BİTİŞİ]
 
-[CONTEXT]
+[BAĞLAM (CONTEXT) BİLGİLERİ BAŞLANGICI]
 {context_text}
+[BAĞLAM (CONTEXT) BİLGİLERİ BİTİŞİ]
 
-Soru: {user_question}
-Cevap:"""
+Kullanıcının Sorusu: {user_question}
+Cevabın:"""
 
-            response = requests.post(
-                "http://llm:11434/api/generate",
-                json={
-                    "model": "qwen2.5:3b",
-                    "prompt": prompt,
-                    "stream": False
-                }
-            )
-            response.raise_for_status()
+            # --- E. OLLAMA STREAMING ---
+            ollama_url = "http://llm:11434/api/generate"
+            payload = {
+                "model": "qwen2.5:3b",
+                "prompt": prompt,
+                "stream": True
+            }
 
-            ai_answer = response.json().get('response', '')
+            def stream_response():
+                full_ai_response = ""
+                with requests.post(ollama_url, json=payload, stream=True) as r:
+                    r.raise_for_status()
+                    for line in r.iter_lines():
+                        if line:
+                            decoded_line = json.loads(line.decode('utf-8'))
+                            chunk = decoded_line.get("response", "")
+                            full_ai_response += chunk
+                            yield chunk  # Kelime kelime ön yüze fırlat
 
-            if not ai_answer or len(ai_answer.strip()) < 20:
-                ai_answer = "Bu konu hakkında elimde yeterli ve güvenilir bilgi bulunmuyor."
-            elif any(x in ai_answer.lower() for x in ["bilmiyorum", "emin değilim", "kesin değil"]):
-                ai_answer = "Bu konu hakkında elimde yeterli ve güvenilir bilgi bulunmuyor."
+                # Tüm akış bittiğinde, diyaloğu bu oturuma (session) kaydet
+                ChatMessage.objects.create(
+                    session=session,
+                    user_message=user_question,
+                    ai_response=full_ai_response
+                )
 
-            ChatMessage.objects.create(
-                session=session,
-                user_message=user_question,
-                ai_response=ai_answer
-            )
-
-            return JsonResponse({
-                "answer": ai_answer,
-                "session_id": session.id
-            })
+            # Yanıt header kısmına session_id ekliyoruz ki frontend yeni sohbetin ID'sini bilsin
+            response = StreamingHttpResponse(stream_response(), content_type='text/plain')
+            response['X-Session-ID'] = str(session.id)
+            return response
 
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+            return JsonResponse({'error': f"Sunucu hatası: {str(e)}"}, status=500)
 
     return JsonResponse({'error': 'Geçersiz istek tipi.'}, status=400)

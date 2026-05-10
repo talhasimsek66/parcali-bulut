@@ -1,0 +1,5 @@
+DB_NAME=veritabani_adi_buraya
+DB_USER=kullanici_adi_buraya
+DB_PASSWORD=gizli_sifre_buraya
+DB_HOST=db
+DB_PORT=5432
