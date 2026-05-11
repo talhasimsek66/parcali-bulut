@@ -3,23 +3,12 @@
 import json
 import requests
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from scraper.models import AcibademData
 from .models import ChatMessage, ChatSession
 from pgvector.django import CosineDistance
-
-
-def _collect_ollama_stream(ollama_url, payload):
-    parts = []
-    with requests.post(ollama_url, json=payload, stream=True) as r:
-        r.raise_for_status()
-        for line in r.iter_lines():
-            if line:
-                decoded_line = json.loads(line.decode('utf-8'))
-                parts.append(decoded_line.get('response', ''))
-    return ''.join(parts)
 
 
 # ana sayfa view i
@@ -37,7 +26,7 @@ def get_chat_history(request, session_id):
     # o oturuma ait mesajları tarihe göre getirir
     messages = session.messages.all().order_by('created_at')
 
-    # frontend için josn çevir
+    # frontend için json çevir
     history = [
         {
             'user_message': msg.user_message,
@@ -48,6 +37,7 @@ def get_chat_history(request, session_id):
     return JsonResponse({'messages': history})
 
 
+# sohbet silme
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_session(request, session_id):
@@ -90,6 +80,7 @@ def chat_api(request):
                 print(f"Soru vektöre çevrilemedi: {e}")
 
             if question_embedding:
+                # Arkadaşının yazdığı temiz CosineDistance annotate mantığı korundu
                 acibadem_data = list(
                     AcibademData.objects.filter(embedding__isnull=False)
                     .annotate(rag_dist=CosineDistance('embedding', question_embedding))
@@ -132,23 +123,36 @@ def chat_api(request):
             # ollama api sine istek
             ollama_url = "http://llm:11434/api/generate"
             payload = {
-                "model": "qwen2.5:3b",
+                "model": "qwen2.5:7b",
                 "prompt": prompt,
-                "stream": True,  # cevap stream
+                "stream": True,
                 "options": {
-                    "temperature": 0.8,
-                    # yaratıcılık seviyesi
-                    "top_p": 0.4  # modelin seçeceği kelimelerin olasılık havuzunu
+                    "temperature": 0.7,
+                    "top_p": 0.4
                 }
             }
 
-            full_response = _collect_ollama_stream(ollama_url, payload)
-            ChatMessage.objects.create(
-                session=session,
-                user_message=user_question,
-                ai_response=full_response,
-            )
-            response = HttpResponse(full_response, content_type='text/plain')
+            # streaming
+            def stream_response():
+                full_response = ""
+                with requests.post(ollama_url, json=payload, stream=True) as r:
+                    r.raise_for_status()
+                    for line in r.iter_lines():
+                        if line:
+                            decoded_line = json.loads(line.decode('utf-8'))
+                            chunk = decoded_line.get("response", "")
+                            full_response += chunk
+                            yield chunk
+
+                # cevap bitince veritabanına kaydet
+                ChatMessage.objects.create(
+                    session=session,
+                    user_message=user_question,
+                    ai_response=full_response,
+                )
+
+
+            response = StreamingHttpResponse(stream_response(), content_type='text/plain')
             response['X-Session-ID'] = str(session.id)
             return response
 
@@ -156,5 +160,5 @@ def chat_api(request):
             # backend de veya yapay zekada bir çökme olursa frontend e durumu bildir
             return JsonResponse({'error': f"Yapay zeka sunucusuna ulaşılamadı: {str(e)}"}, status=500)
 
-    # POST dışındaki istekleri (GET vb.) reddet
+    # POST dışındaki istekleri reddet
     return JsonResponse({'error': 'Geçersiz istek tipi.'}, status=400)
