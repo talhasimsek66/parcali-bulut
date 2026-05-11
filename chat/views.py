@@ -1,15 +1,25 @@
 # chat/views.py
 
-import requests
 import json
+import requests
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from scraper.models import AcibademData
 from .models import ChatMessage, ChatSession
-from django.db.models import Q
 from pgvector.django import CosineDistance
+
+
+def _collect_ollama_stream(ollama_url, payload):
+    parts = []
+    with requests.post(ollama_url, json=payload, stream=True) as r:
+        r.raise_for_status()
+        for line in r.iter_lines():
+            if line:
+                decoded_line = json.loads(line.decode('utf-8'))
+                parts.append(decoded_line.get('response', ''))
+    return ''.join(parts)
 
 
 # ana sayfa view i
@@ -29,7 +39,10 @@ def get_chat_history(request, session_id):
 
     # frontend için josn çevir
     history = [
-        {'user_message': msg.user_message, 'ai_response': msg.ai_response}
+        {
+            'user_message': msg.user_message,
+            'ai_response': msg.ai_response,
+        }
         for msg in messages
     ]
     return JsonResponse({'messages': history})
@@ -76,17 +89,14 @@ def chat_api(request):
             except Exception as e:
                 print(f"Soru vektöre çevrilemedi: {e}")
 
-            # semantik arama
             if question_embedding:
-                # pgvector eklentisinin CosineDistance özelliğini kullanıyoruz
-                # kullanıcının sorusunun vektörü ile veritabanındaki verilerin vektörleri arasındaki açıyı ölçer
-                # en benzer ilk 8 parçayı getirir
-                acibadem_data = AcibademData.objects.filter(embedding__isnull=False).order_by(
-                    CosineDistance('embedding', question_embedding)
-                )[:8]
+                acibadem_data = list(
+                    AcibademData.objects.filter(embedding__isnull=False)
+                    .annotate(rag_dist=CosineDistance('embedding', question_embedding))
+                    .order_by('rag_dist')[:8]
+                )
             else:
-                # vektörleme başarısız olursa mecburen rastgele ilk 8 veriyi alır
-                acibadem_data = AcibademData.objects.all()[:8]
+                acibadem_data = list(AcibademData.objects.all()[:8])
 
             # bulunan bu 8 parçayı alt alta ekleyerek yapay zekaya sunacağımız tek bir context metni oluşturuyoruz
             context_text = "\n\n".join([f"--- {item.title} ---\n{item.content}" for item in acibadem_data])
@@ -122,7 +132,7 @@ def chat_api(request):
             # ollama api sine istek
             ollama_url = "http://llm:11434/api/generate"
             payload = {
-                "model": "qwen2.5:7b",
+                "model": "qwen2.5:3b",
                 "prompt": prompt,
                 "stream": True,  # cevap stream
                 "options": {
@@ -132,33 +142,13 @@ def chat_api(request):
                 }
             }
 
-            # streaming
-            def stream_response():
-                full_response = ""  # gelen kelimeleri burada biriktir
-
-                # stream=True ile bağlantıyı açık tutarak istek atıyoruz
-                with requests.post(ollama_url, json=payload, stream=True) as r:
-                    r.raise_for_status()
-                    for line in r.iter_lines():
-                        if line:
-                            # ollama dan gelen her bir satır JSON formatındadır utf 8 e decode et
-                            decoded_line = json.loads(line.decode('utf-8'))
-                            chunk = decoded_line.get("response", "")  # gelen kelime
-                            full_response += chunk
-                            yield chunk  # Bu kelimeyi anında tarayıcıya (frontend'e) fırlat
-
-                # yapay zeka susunca biriken tüm metni veritabanına kalıcı olarak kaydediyoruz
-                ChatMessage.objects.create(
-                    session=session,
-                    user_message=user_question,
-                    ai_response=full_response
-                )
-
-            # yanıtı frontende gönderme
-            # standart JsonResponse yerine StreamingHttpResponse kullanıyoruz (her kelime geldiğinde yineleyerek ekrana basmak için)
-            response = StreamingHttpResponse(stream_response(), content_type='text/plain')
-
-            # frontend eğer yeni bir sohbette ise yeni oluşturulan id yi bilsin ve url yi falan güncelleyebilsin diye header içine id ekliyoruz
+            full_response = _collect_ollama_stream(ollama_url, payload)
+            ChatMessage.objects.create(
+                session=session,
+                user_message=user_question,
+                ai_response=full_response,
+            )
+            response = HttpResponse(full_response, content_type='text/plain')
             response['X-Session-ID'] = str(session.id)
             return response
 
