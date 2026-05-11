@@ -399,6 +399,85 @@
             background: rgba(30, 41, 59, 0.95);
         }
 
+        .top-nav-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            min-width: 0;
+        }
+
+        .export-chat-btn {
+            margin-left: auto;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: rgba(30, 41, 59, 0.6);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: border-color 0.2s, color 0.2s, background 0.2s;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+
+        .export-chat-btn:hover {
+            border-color: var(--primary);
+            color: var(--text-main);
+            background: rgba(14, 165, 233, 0.12);
+        }
+
+        .export-chat-btn i {
+            font-size: 0.95rem;
+            color: var(--primary);
+        }
+
+        .export-chat-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .export-toast {
+            position: fixed;
+            top: 72px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-8px);
+            z-index: 300;
+            padding: 10px 18px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            font-size: 0.88rem;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+            pointer-events: none;
+            max-width: min(90vw, 420px);
+            text-align: center;
+        }
+
+        .export-toast.is-visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (max-width: 520px) {
+            .export-chat-btn .export-chat-btn-label {
+                display: none;
+            }
+            .export-chat-btn {
+                padding: 8px 10px;
+            }
+        }
+
         .chat-container {
             flex: 1;
             overflow-y: auto;
@@ -676,10 +755,16 @@
 
     <main class="main-content">
         <div class="top-nav">
-            <button type="button" class="menu-toggle" id="menuToggleBtn" onclick="toggleSidebar()" aria-label="Yan menüyü aç veya kapat" aria-expanded="true">
-                <i class="fa-solid fa-bars" id="menuToggleIcon"></i>
+            <div class="top-nav-left">
+                <button type="button" class="menu-toggle" id="menuToggleBtn" onclick="toggleSidebar()" aria-label="Yan menüyü aç veya kapat" aria-expanded="true">
+                    <i class="fa-solid fa-bars" id="menuToggleIcon"></i>
+                </button>
+                <span style="font-weight: 500; font-size: 1.1rem; color: var(--text-muted);">Asistan</span>
+            </div>
+            <button type="button" class="export-chat-btn" id="exportChatBtn" onclick="exportChatAsText()" title="Sohbeti düz metin olarak panoya kopyala" aria-label="Sohbeti dışarı aktar">
+                <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>
+                <span class="export-chat-btn-label">Sohbeti dışarı aktar</span>
             </button>
-            <span style="font-weight: 500; font-size: 1.1rem; color: var(--text-muted);">Asistan</span>
         </div>
 
         <div class="chat-container" id="chatBox">
@@ -708,6 +793,8 @@
             </div>
         </div>
     </main>
+
+    <div id="exportToast" class="export-toast" role="status" aria-live="polite"></div>
 
     <script>
         const chatBox = document.getElementById('chatBox');
@@ -829,6 +916,95 @@
                     }
                 }, 1600);
             }).catch(() => { /* sessiz */ });
+        }
+
+        function showExportToast(msg) {
+            const el = document.getElementById('exportToast');
+            if (!el) return;
+            el.textContent = msg;
+            el.classList.add('is-visible');
+            clearTimeout(el._hideTimer);
+            el._hideTimer = setTimeout(() => el.classList.remove('is-visible'), 2800);
+        }
+
+        function buildChatExportFromDom() {
+            const lines = [];
+            chatBox.querySelectorAll('.message-row').forEach((row) => {
+                if (row.id === 'typingIndicator') return;
+                const bubble = row.querySelector('.message-column .message-bubble');
+                if (!bubble) return;
+                const t = (bubble.innerText || '').trim();
+                if (!t) return;
+                if (row.classList.contains('user')) {
+                    lines.push(`Kullanıcı:\n${t}`);
+                } else if (row.classList.contains('ai')) {
+                    lines.push(`Asistan:\n${t}`);
+                }
+            });
+            return lines.join('\n\n—\n\n');
+        }
+
+        async function exportChatAsText() {
+            const btn = document.getElementById('exportChatBtn');
+            let text = '';
+
+            if (currentSessionId) {
+                try {
+                    const res = await fetch(`/api/history/${currentSessionId}/`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        const msgs = data.messages || [];
+                        if (msgs.length) {
+                            const parts = [];
+                            msgs.forEach((m) => {
+                                parts.push(
+                                    `Kullanıcı:\n${(m.user_message || '').trim()}\n\nAsistan:\n${(m.ai_response || '').trim()}`
+                                );
+                            });
+                            text = parts.join('\n\n—\n\n');
+                        }
+                    }
+                } catch (_) { /* DOM yedeği */ }
+            }
+
+            if (!text.trim()) {
+                text = buildChatExportFromDom();
+            }
+
+            if (!text.trim()) {
+                showExportToast('Dışa aktarılacak mesaj bulunamadı.');
+                return;
+            }
+
+            const header = 'Acıbadem AI Asistanı — sohbet özeti\n============================\n\n';
+            const body = header + text.trim();
+
+            if (btn) btn.disabled = true;
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(body);
+                } else {
+                    throw new Error('no-clipboard');
+                }
+                showExportToast('Sohbet metni panoya kopyalandı.');
+            } catch (_) {
+                const ta = document.createElement('textarea');
+                ta.value = body;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    showExportToast('Sohbet metni panoya kopyalandı.');
+                } catch (e2) {
+                    showExportToast('Kopyalanamadı. Tarayıcı izni verin veya metni elle kopyalayın.');
+                }
+                document.body.removeChild(ta);
+            } finally {
+                if (btn) btn.disabled = false;
+            }
         }
 
         async function deleteSession(id, ev) {
