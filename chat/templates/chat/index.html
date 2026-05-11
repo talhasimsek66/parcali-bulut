@@ -502,6 +502,7 @@
             flex-direction: column;
             align-items: flex-start;
             max-width: 80%;
+            min-width: 0;
             gap: 6px;
         }
 
@@ -557,10 +558,16 @@
         .user .message-avatar { display: none; } /* Kullanıcı avatarını gizledik, balon sağda zaten */
 
         .message-bubble {
-            max-width: 80%;
+            display: inline-block;
+            box-sizing: border-box;
+            min-width: 0;
+            max-width: 100%;
+            vertical-align: top;
             padding: 16px 20px;
             font-size: 1rem;
             line-height: 1.6;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .user .message-bubble {
@@ -650,6 +657,36 @@
             transition: transform 0.2s, background 0.2s;
             flex-shrink: 0;
             margin-bottom: 3px;
+            overflow: visible;
+        }
+
+        .send-btn-icon-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            transform-origin: center center;
+            animation: send-plane-orbit 2.4s linear infinite paused;
+        }
+
+        .input-box.is-typing .send-btn:not(:disabled) .send-btn-icon-wrap {
+            animation-play-state: running;
+        }
+
+        .send-btn:disabled .send-btn-icon-wrap {
+            animation: none;
+        }
+
+        @keyframes send-plane-orbit {
+            from { transform: rotate(0deg) translateY(-4px); }
+            to { transform: rotate(360deg) translateY(-4px); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .send-btn-icon-wrap {
+                animation: none !important;
+            }
         }
 
         .send-btn:hover { background: var(--primary-hover); transform: scale(1.05); }
@@ -788,7 +825,9 @@
             <div class="input-box">
                 <textarea id="userInput" rows="1" placeholder="Asistan'a soru sorun..." oninput="autoResize(this)" onkeydown="handleKeyPress(event)"></textarea>
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-                    <i class="fa-solid fa-paper-plane"></i>
+                    <span class="send-btn-icon-wrap" aria-hidden="true">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </span>
                 </button>
             </div>
         </div>
@@ -848,6 +887,7 @@
         });
 
         syncSidebarToggleUi();
+        syncSendPlaneTypingState();
 
         function openFaqModal() {
             const modal = document.getElementById('faqModal');
@@ -891,6 +931,17 @@
         function autoResize(el) {
             el.style.height = 'auto';
             el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+            syncSendPlaneTypingState();
+        }
+
+        function syncSendPlaneTypingState() {
+            const box = document.querySelector('.input-box');
+            if (!box || !userInput) return;
+            if (userInput.value.trim().length > 0) {
+                box.classList.add('is-typing');
+            } else {
+                box.classList.remove('is-typing');
+            }
         }
 
         function scrollToBottom() {
@@ -1168,6 +1219,7 @@
             } finally {
                 sendBtn.disabled = false;
                 scrollToBottom();
+                syncSendPlaneTypingState();
             }
         }
 
