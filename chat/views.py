@@ -6,27 +6,24 @@ from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from scraper.models import AcibademData
 from .models import ChatMessage, ChatSession
 from pgvector.django import CosineDistance
 
 
-# ana sayfa view i
+# ana sayfa burasi soldaki gecmisi tarihe gore dizip gonderiyoruz
 def chat_interface(request):
-    # soldaki sidebar (eskiden yeniye)
     sessions = ChatSession.objects.all().order_by('-created_at')
     return render(request, 'chat/index.html', {'sessions': sessions})
 
 
-# geçmiş yükleme api si (kullanıcı sol menüden bir sohbete tıkladığında bu fonksiyon çalışır)
+# tiklanan sohbetin gecmisini donduren yer bulamazsa 404
 def get_chat_history(request, session_id):
-    # belirtilen id ye sahip oturumu bulur (yoksa 404)
     session = get_object_or_404(ChatSession, id=session_id)
-
-    # o oturuma ait mesajları tarihe göre getirir
     messages = session.messages.all().order_by('created_at')
 
-    # frontend için json çevir
+    # eski mesajlari sirasiyla alip json yapiyoruz frontende lazim
     history = [
         {
             'user_message': msg.user_message,
@@ -37,7 +34,7 @@ def get_chat_history(request, session_id):
     return JsonResponse({'messages': history})
 
 
-# sohbet silme
+# silme apisi calisiyor dokunmadim
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_session(request, session_id):
@@ -49,28 +46,25 @@ def delete_session(request, session_id):
     return HttpResponse(status=204)
 
 
-# llm iletişim api si
-@csrf_exempt  # frontend'den gelen POST isteklerinde CSRF token zorunluğu yok
+# ana beynimiz burasi disardan gelen post isteklerini karsilar
+@csrf_exempt
 def chat_api(request):
     if request.method == 'POST':
         try:
-            # frontend den gelen JSON verisini ayarlar
             data = json.loads(request.body)
-            user_question = data.get('question', '')  # kullanıcının sorduğu soru
-            session_id = data.get('session_id')  # hangi sohbet odasında olduğu
+            user_question = data.get('question', '')
+            session_id = data.get('session_id')
 
-            # oturum yönetimi
+            # adam eski sohbete devam ediyorsa onu bul yoksa ilk 40 harften yeni baslik atip oturum ac
             if session_id:
-                # eğer frontend bir id gönderdiyse mevcut oturumu bul
                 session = ChatSession.objects.get(id=session_id)
             else:
                 title = user_question[:40] + ("..." if len(user_question) > 40 else "")
                 session = ChatSession.objects.create(title=title)
 
-            # soruyu vektörize etme
+            # adamin sorusunu alip ollamaya veriyoruz ki matematiksel vektore cevirsin
             question_embedding = None
             try:
-                # kullanıcının sorusunu veritabanında arayabilmek için ollama ya gönderip vektöre çeviriyoruz
                 embed_response = requests.post('http://llm:11434/api/embeddings', json={
                     "model": "nomic-embed-text",
                     "prompt": user_question
@@ -79,31 +73,45 @@ def chat_api(request):
             except Exception as e:
                 print(f"Soru vektöre çevrilemedi: {e}")
 
+            # once anlamina gore en yakin 5 seyi bul
+            vector_results = []
             if question_embedding:
-                # Arkadaşının yazdığı temiz CosineDistance annotate mantığı korundu
-                acibadem_data = list(
+                vector_results = list(
                     AcibademData.objects.filter(embedding__isnull=False)
                     .annotate(rag_dist=CosineDistance('embedding', question_embedding))
-                    .order_by('rag_dist')[:8]
+                    .order_by('rag_dist')[:5]
                 )
-            else:
-                acibadem_data = list(AcibademData.objects.all()[:8])
 
-            # bulunan bu 8 parçayı alt alta ekleyerek yapay zekaya sunacağımız tek bir context metni oluşturuyoruz
+            # sonra tam kelime eslesmesi var mi ona bak ozel isimler ve ders kodlari icin sart bu
+            query = SearchQuery(user_question)
+            keyword_results = list(
+                AcibademData.objects.annotate(
+                    search=SearchVector('title', 'content'),
+                    rank=SearchRank(SearchVector('title', 'content'), query)
+                ).filter(search=query).order_by('-rank')[:5]
+            )
+
+            # ikisi ayni seyi bulmussa ust uste binmesin diye id uzerinden teke dusuruyoruz
+            combined_dict = {item.id: item for item in (vector_results + keyword_results)}
+            acibadem_data = list(combined_dict.values())
+
+            # hicbir sey bulamazsa bos kalmasin diye rastgele 5 tane veriyoruz
+            if not acibadem_data:
+                acibadem_data = list(AcibademData.objects.all()[:5])
+
+            # hepsini alt alta ekleyip devasa bir metin yapiyoruz yapay zeka bunu okuyacak
             context_text = "\n\n".join([f"--- {item.title} ---\n{item.content}" for item in acibadem_data])
 
-            # sohbet geçmişini
-            # modelin çok uzayıp kafasının karışmaması için sadece aynı son 5 mesajı alıyoruz
+            # modelin kafasi yanmasin diye sadece son 5 mesaji veriyoruz
             recent_chats = session.messages.all().order_by('-created_at')[:5]
             history_text = ""
             if recent_chats:
-                # order_by ile yeniden eskiye çektik ama metne yazarken eskiden yeniye akması için reversed() kullanıyoruz
                 for chat in reversed(recent_chats):
                     history_text += f"Kullanıcı: {chat.user_message}\nAsistan: {chat.ai_response}\n\n"
             else:
                 history_text = "Bu oturumdaki ilk konuşmamız."
 
-            # prompt
+            # burasi prompt kismi modele nasil davranacagini soyluyoruz
             prompt = f"""Sen Acıbadem Üniversitesi için tasarlanmış resmi ve yardımsever bir yapay zeka asistanısın. 
             Aşağıda sana üniversitenin web sitesinden toplanmış bazı güncel bilgiler (Context) ve bizim seninle olan önceki konuşmalarımızın geçmişini (Geçmiş) veriyorum. 
             Lütfen kullanıcının sorusunu SADECE bu bilgilere ve geçmiş konuşmalarımıza dayanarak yanıtla. 
@@ -120,7 +128,7 @@ def chat_api(request):
             Kullanıcının Sorusu: {user_question}
             Cevabın:"""
 
-            # ollama api sine istek
+            # uydurma riski var
             ollama_url = "http://llm:11434/api/generate"
             payload = {
                 "model": "qwen2.5:7b",
@@ -132,7 +140,7 @@ def chat_api(request):
                 }
             }
 
-            # streaming
+            # kelime kelime ekrana akitma isini burasi yapiyor bitince de db ye kaydediyor
             def stream_response():
                 full_response = ""
                 with requests.post(ollama_url, json=payload, stream=True) as r:
@@ -144,21 +152,20 @@ def chat_api(request):
                             full_response += chunk
                             yield chunk
 
-                # cevap bitince veritabanına kaydet
                 ChatMessage.objects.create(
                     session=session,
                     user_message=user_question,
                     ai_response=full_response,
                 )
 
-
+            # json degil stream donduruyoruz ki harfler yagsin
             response = StreamingHttpResponse(stream_response(), content_type='text/plain')
             response['X-Session-ID'] = str(session.id)
             return response
 
         except Exception as e:
-            # backend de veya yapay zekada bir çökme olursa frontend e durumu bildir
-            return JsonResponse({'error': f"Yapay zeka sunucusuna ulaşılamadı: {str(e)}"}, status=500)
+            # patlarsa 500 hatasi
+            return JsonResponse({'error': f"Sistem hatası: {str(e)}"}, status=500)
 
-    # POST dışındaki istekleri reddet
+    # post degilse dogrudan reddet
     return JsonResponse({'error': 'Geçersiz istek tipi.'}, status=400)
