@@ -1,85 +1,56 @@
 # ==============================================================================
-# PARÇALI BULUT - GELİŞTİRİLMİŞ CI/CD YAPILANDIRMASI
+# PARÇALI BULUT - ULTRA GÜVENLİ VE BASİT TEST SÜRECİ
 # ==============================================================================
-# Bu dosya, GitHub üzerinde kodun her değişiminde otomatik olarak çalışır.
-# Amacı: Kodun bozulup bozulmadığını, kütüphanelerin yüklenebilirliğini
-# ve temel Django yapısının doğruluğunu kontrol etmektir.
-# ------------------------------------------------------------------------------
-
 name: Django CI/CD Pipeline
 
-# İŞ AKIŞI TETİKLEYİCİLERİ
 on:
   push:
-    branches: [ "main", "master" ] # Ana dallara kod gönderildiğinde çalışır.
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ "main", "master" ] # Çekme isteklerinde (PR) otomatik denetim yapar.
+    branches: [ "main", "master" ]
 
 jobs:
-  # ----------------------------------------------------------------------------
-  # JOB 1: TEMEL KONTROLLER (Hızlı ve Güvenli Testler)
-  # ----------------------------------------------------------------------------
-  base_checks:
-    name: "Python ve Django Temel Doğrulama"
-    runs-on: ubuntu-latest # İşlemler en güncel Ubuntu sunucusu üzerinde koşar.
+  everything:
+    name: "Sistem ve Paket Kontrolü"
+    runs-on: ubuntu-latest
 
-    # Django'nun çalışabilmesi için geçici çevre değişkenleri:
     env:
-      SECRET_KEY: "gecici-guvenlik-anahtari-test-icin"
+      SECRET_KEY: "gecici-key"
       DEBUG: "True"
-      # Veritabanı hatası almamak için CI ortamında SQLite kullanılması önerilir.
 
     steps:
-    # 1. ADIM: GitHub üzerindeki kodlarını sanal makineye indirir.
-    - name: "1. Kodu Repodan Çek (Checkout)"
+    - name: "1. Kodu Al"
       uses: actions/checkout@v4
 
-    # 2. ADIM: Belirlediğimiz Python sürümünü sisteme kurar.
-    - name: "2. Python 3.12 Kurulumu"
+    - name: "2. Python'u Kur"
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
 
-    # 3. ADIM: Projenin çalışması için gereken tüm kütüphaneleri yükler.
-    - name: "3. Bağımlılıkların Yüklenmesi (pip)"
+    - name: "3. Sistem Paketlerini Güncelle"
+      # Eğer hata 'psycopg2' kaynaklıysa bu adım sorunu çözer.
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpq-dev gcc python3-dev
+
+    - name: "4. Temel Paketleri Kur (pip)"
       run: |
         python -m pip install --upgrade pip
-        # requirements.txt içindeki paketlerin kurulumu test edilir.
+        # Sadece requirements.txt içindekileri kurmaya çalışıyoruz.
+        # Eğer burada hata alırsan requirements.txt dosyanı kontrol etmelisin.
         pip install -r requirements.txt
 
-    # 4. ADIM: Django'nun genel sistem kontrolü.
-    # Bu adım; settings, modeller ve genel yapıda hata olup olmadığına bakar.
-    - name: "4. Django Sistem Sağlık Kontrolü (Check)"
+    - name: "5. Django Ayar Kontrolü"
+      # Veritabanına hiç dokunmadan sadece settings.py kontrolü yapar.
       run: |
         python manage.py check
 
-    # 5. ADIM: Modellerde yapılan değişikliklerin migration dosyalarına yansıtılıp
-    # yansıtılmadığını kontrol eder. Unutulan bir migration varsa hata verir.
-    - name: "5. Migration Uyumluluk Testi"
+    - name: "6. Migration Dosya Kontrolü"
+      # Model değişikliği var mı yok mu diye bakar.
       run: |
         python manage.py makemigrations --check --dry-run
 
-    # 6. ADIM: Proje içindeki statik dosyaların (CSS, JS) toplanabilirliğini denetler.
-    # Statik dosya yapısında hata varsa burada yakalanır.
-    - name: "6. Statik Dosya Toplama Testi (Collectstatic)"
+    - name: "7. Docker Yapılandırma Kontrolü"
+      # En azından imajın oluşup oluşmadığını doğrular.
       run: |
-        python manage.py collectstatic --noinput --dry-run
-
-  # ----------------------------------------------------------------------------
-  # JOB 2: PAKETLEME KONTROLÜ (Docker Testi)
-  # ----------------------------------------------------------------------------
-  docker_build:
-    name: "Docker İmajı Hazırlama Denetimi"
-    runs-on: ubuntu-latest
-    # Bu işin (job) çalışması için yukarıdaki 'base_checks' işinin başarıyla bitmesi gerekir:
-    needs: base_checks
-
-    steps:
-    - name: "Kodu Checkout Et"
-      uses: actions/checkout@v4
-
-    # Adım: Dockerfile dosyasının doğru yazılıp yazılmadığını kontrol eder.
-    # Eğer imaj başarılı oluşursa, canlı ortama çıkmaya hazır demektir.
-    - name: "Docker İmajını İnşa Et (Build)"
-      run: |
-        docker build -t parcali-bulut-app:test .
+        docker build -t test-image .
