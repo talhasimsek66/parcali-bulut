@@ -1,0 +1,106 @@
+# ==============================================================================
+# PARÇALI BULUT - CI/CD TEST VE DOĞRULAMA SÜRECİ (GitHub Actions)
+# ==============================================================================
+# Bu yapılandırma dosyası, projenin her güncellemesinde (push/PR) kodun kalitesini, 
+# veritabanı uyumluluğunu ve çalışma bütünlüğünü otomatik olarak kontrol eder.
+# ------------------------------------------------------------------------------
+
+name: Django CI/CD Pipeline
+
+# İş akışını hangi olayların (events) tetikleyeceğini belirliyoruz:
+on:
+  push:
+    # Ana dallara (main/master) yapılan her gönderimde çalışır.
+    branches: [ "main", "master" ]
+  pull_request:
+    # Ana dallara yönelik açılan her PR (çekme isteği) için doğrulama yapar.
+    branches: [ "main", "master" ]
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # JOB 1: TEST VE LINT (Kod Kalitesi ve Birim Testler)
+  # ----------------------------------------------------------------------------
+  test:
+    name: "Python Testleri ve Kod Kalite Kontrolü"
+    runs-on: ubuntu-latest # En güncel Ubuntu imajı üzerinde çalıştırıyoruz.
+
+    # Projemiz pgvector kullandığı için CI ortamında bir PostgreSQL servisi kuruyoruz:
+    services:
+      postgres:
+        # pgvector eklentisinin önceden yüklü olduğu özel imajı kullanıyoruz:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432 # Konteynır içindeki portu dışarıya (localhost) açıyoruz.
+        # Veritabanının hazır olduğundan emin olmak için sağlık kontrolü yapıyoruz:
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # Django'nun çalışması için gereken çevresel değişkenleri burada tanımlıyoruz:
+    # Not: CI ortamında gerçek .env dosyası yerine bu değerler kullanılır.
+    env:
+      DB_NAME: test_db
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      DB_HOST: localhost
+      DB_PORT: 5432
+      SECRET_KEY: "ci-is-safe-with-this-dummy-key"
+      DEBUG: "True"
+
+    steps:
+    # Adım 1: Kodun GitHub'dan iş akışı sunucusuna indirilmesi.
+    - name: "Kodu Checkout Et"
+      uses: actions/checkout@v4
+    
+    # Adım 2: Belirlenen Python sürümünün kurulması.
+    - name: "Python 3.12 Ortamını Kur"
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        
+    # Adım 3: Bağımlılıkların ve linter araçlarının yüklenmesi.
+    - name: "Gerekli Paketleri Yükle (pip)"
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff # Hızlı ve modern linter aracı.
+        pip install -r requirements.txt
+        
+    # Adım 4: Kodun standartlara (PEP8 vb.) uygunluğunun denetlenmesi.
+    - name: "Kod Stilini Denetle (Ruff)"
+      run: |
+        # ruff check komutu, kod içindeki hataları ve stil bozukluklarını raporlar.
+        ruff check .
+        
+    # Adım 5: Migration dosyalarının veritabanı şemasıyla uyumunun kontrolü.
+    - name: "Migration Uyumluluğunu Kontrol Et"
+      run: |
+        # Bu komut, modellerde değişiklik yapılıp makemigrations unutulmuşsa hata verir.
+        python manage.py makemigrations --check
+        
+    # Adım 6: Django Unit Testlerinin çalıştırılması.
+    - name: "Django Testlerini Koş"
+      run: |
+        # Django otomatik olarak test veritabanı oluşturur ve pgvector eklentisini dener.
+        python manage.py test
+
+  # ----------------------------------------------------------------------------
+  # JOB 2: DOCKER BUILD (Paketleme Doğrulaması)
+  # ----------------------------------------------------------------------------
+  build-docker:
+    name: "Docker İmajı Oluşturma Testi"
+    runs-on: ubuntu-latest
+    steps:
+    - name: "Kodu Checkout Et"
+      uses: actions/checkout@v4
+    
+    # Adım 1: Dockerfile'ın hatasız olduğundan ve imajın oluşturulabildiğinden emin oluyoruz.
+    - name: "Docker İmajını İnşa Et (Build)"
+      run: |
+        # Bu adım, canlıya çıkış öncesi paketlemenin bozulup bozulmadığını kontrol eder.
+        docker build -t chatbot-web:latest .
